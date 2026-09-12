@@ -1,0 +1,17 @@
+{
+  "name": "Kho Thang Điểm & Test Đánh Giá PHCN",
+  "short_name": "Kho Thang Điểm",
+  "description": "Thư viện các thang điểm, bộ câu hỏi và test đánh giá dùng trong phục hồi chức năng",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1116",
+  "theme_color": "#14202b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

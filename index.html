@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Kho Thang Điểm &amp; Test Đánh Giá PHCN</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14202b">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kho Thang Điểm">
+<link rel="icon" href="icon-192.png">
+
+<style>
+  :root{
+    --bg-page:#0c1116;
+    --bg-main:#14202b;
+    --bg-main-alt:#182735;
+    --wood:#3c2b1e;
+    --wood-light:#55402a;
+    --wood-border:#241a12;
+    --node-blue-1:#2c5877;
+    --node-blue-2:#4a89ad;
+    --node-border:#86c2e0;
+    --node-empty:#3a3f45;
+    --node-empty-border:#666e76;
+    --gold:#e0bd72;
+    --gold-soft:#c9a55c;
+    --text-light:#f1e6cf;
+    --text-muted:#b9ac8f;
+    --green:#4caf6d;
+    --red:#b3413a;
+    --serif:'Times New Roman', Times, 'Nimbus Roman No9 L', 'Liberation Serif', serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--serif);
+    background:radial-gradient(ellipse at 50% -10%, #1c2c3a 0%, var(--bg-page) 60%);
+    color:var(--text-light);
+    -webkit-tap-highlight-color:transparent;
+  }
+  #app{
+    max-width:1180px;
+    margin:18px auto;
+    background:radial-gradient(ellipse at 50% 0%, var(--bg-main-alt) 0%, var(--bg-main) 70%);
+    border:8px solid var(--wood);
+    border-radius:10px;
+    box-shadow:0 0 0 2px var(--wood-border), 0 18px 40px rgba(0,0,0,.55);
+    overflow:hidden;
+    min-height:calc(100vh - 36px);
+    display:flex;
+    flex-direction:column;
+  }
+
+  .app-header{
+    background:linear-gradient(180deg, var(--wood-light), var(--wood));
+    border-bottom:3px solid var(--wood-border);
+    padding:14px 18px 12px;
+  }
+  .app-title-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .app-title{ margin:0; font-size:22px; letter-spacing:.3px; color:var(--gold); text-shadow:0 1px 0 rgba(0,0,0,.5); }
+  .app-subtitle{ margin:2px 0 0; font-size:13px; color:var(--text-muted); font-style:italic; }
+  .header-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .sync-badge{
+    font-size:11.5px; padding:5px 9px; border-radius:12px;
+    border:1px solid var(--wood-border); color:var(--text-muted); background:rgba(0,0,0,.25);
+    white-space:nowrap;
+  }
+  .sync-badge.on{ color:var(--green); border-color:var(--green); }
+  .icon-btn{
+    background:rgba(0,0,0,.25); border:1px solid var(--wood-border); color:var(--text-light);
+    font-family:var(--serif); font-size:12.5px; padding:6px 10px; border-radius:5px; cursor:pointer;
+  }
+  .icon-btn:hover{ background:rgba(0,0,0,.4); }
+
+  .toolbar{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  #searchInput{
+    flex:1 1 220px; min-width:160px; font-family:var(--serif); font-size:14px; padding:8px 10px;
+    border-radius:5px; border:1px solid var(--wood-border); background:rgba(0,0,0,.3); color:var(--text-light);
+  }
+  #searchInput::placeholder{ color:var(--text-muted); }
+  .btn{ font-family:var(--serif); font-size:14px; padding:8px 14px; border-radius:5px; border:1px solid var(--wood-border); cursor:pointer; }
+  .btn-gold{ background:linear-gradient(180deg, var(--gold), var(--gold-soft)); color:#2a1d0f; font-weight:bold; }
+  .btn-gold:hover{ filter:brightness(1.07); }
+
+  .tab-bar{ display:flex; gap:4px; padding:10px 14px 0; overflow-x:auto; background:var(--wood); border-bottom:3px solid var(--wood-border); }
+  .tab{
+    position:relative; display:flex; align-items:center; gap:6px; padding:8px 14px 9px;
+    background:var(--bg-main-alt); border:1px solid var(--wood-border); border-bottom:none;
+    border-radius:7px 7px 0 0; color:var(--text-muted); font-size:14px; white-space:nowrap; cursor:pointer; flex-shrink:0;
+  }
+  .tab.active{ background:var(--bg-main); color:var(--gold); font-weight:bold; box-shadow:inset 0 2px 0 var(--gold-soft); }
+  .tab[contenteditable="true"]{ outline:1px dashed var(--gold-soft); color:var(--text-light); }
+  .tab-close{ font-size:12px; color:var(--text-muted); opacity:.55; padding:0 2px; }
+  .tab-close:hover{ opacity:1; color:var(--red); }
+  .tab-add{ display:flex; align-items:center; justify-content:center; padding:8px 14px; color:var(--gold-soft); font-size:16px; cursor:pointer; flex-shrink:0; }
+  .tab-add:hover{ color:var(--gold); }
+
+  .grid-area{
+    flex:1; padding:20px;
+    background-image:linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+    background-size:26px 26px;
+  }
+  .empty-hint{ color:var(--text-muted); font-style:italic; text-align:center; margin-top:60px; font-size:15px; }
+  .node-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(148px, 1fr)); gap:16px; }
+  .node{
+    position:relative; aspect-ratio:1/1; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; padding:10px 8px; cursor:pointer; text-align:center; border:2px solid var(--node-border);
+    background:linear-gradient(160deg, var(--node-blue-2), var(--node-blue-1));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 3px 6px rgba(0,0,0,.4);
+  }
+  .node:hover{ filter:brightness(1.08); }
+  .node.empty{ border:2px dashed var(--node-empty-border); background:linear-gradient(160deg, #464c53, var(--node-empty)); box-shadow:none; }
+  .node-icon{ width:30px; height:30px; color:var(--text-light); opacity:.9; }
+  .node.empty .node-icon{ opacity:.5; }
+  .node-title{ font-size:13px; line-height:1.2; color:var(--text-light); word-break:break-word; }
+  .node.empty .node-title{ color:var(--text-muted); }
+  .node-check{
+    position:absolute; top:-7px; right:-7px; width:20px; height:20px; border-radius:50%; background:var(--green);
+    border:2px solid var(--bg-main); display:flex; align-items:center; justify-content:center; font-size:12px; color:#0c1116; font-weight:bold;
+  }
+  .node-add{
+    aspect-ratio:1/1; border-radius:8px; border:2px dashed var(--gold-soft); display:flex; align-items:center; justify-content:center;
+    color:var(--gold-soft); font-size:30px; cursor:pointer;
+  }
+  .node-add:hover{ color:var(--gold); border-color:var(--gold); }
+
+  .tooltip{
+    position:fixed; max-width:240px; background:#0d1a24; border:1px solid var(--node-border); color:var(--text-light);
+    font-size:12.5px; line-height:1.4; padding:8px 10px; border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.5);
+    pointer-events:none; z-index:60;
+  }
+  .tooltip.hidden{ display:none; }
+
+  .overlay{ position:fixed; inset:0; background:rgba(5,9,12,.72); display:flex; align-items:center; justify-content:center; z-index:80; padding:16px; }
+  .overlay.hidden{ display:none; }
+
+  .detail-panel{
+    width:100%; max-width:760px; max-height:90vh; overflow-y:auto;
+    background:linear-gradient(180deg, var(--bg-main-alt), var(--bg-main));
+    border:6px solid var(--wood); box-shadow:0 0 0 2px var(--wood-border), 0 20px 50px rgba(0,0,0,.6);
+    border-radius:10px; padding:22px 22px 26px; position:relative;
+  }
+  .btn-close{ position:absolute; top:10px; right:12px; background:none; border:none; color:var(--text-muted); font-size:20px; cursor:pointer; }
+  .btn-close:hover{ color:var(--red); }
+
+  .field-label{ display:block; font-size:13px; color:var(--gold-soft); margin:16px 0 6px; }
+  .field-label:first-of-type{ margin-top:2px; }
+  .field-input, .field-textarea{
+    width:100%; font-family:var(--serif); font-size:15px; color:var(--text-light); background:rgba(0,0,0,.28);
+    border:1px solid var(--wood-border); border-radius:5px; padding:9px 10px; resize:vertical;
+  }
+  .field-input.title-input{ font-size:19px; font-weight:bold; color:var(--gold); }
+  .field-hint{ font-size:11.5px; color:var(--text-muted); margin-top:4px; font-style:italic; }
+
+  /* score builder */
+  .mode-switch{ display:flex; gap:8px; margin-top:8px; }
+  .mode-switch button{
+    flex:1; font-family:var(--serif); font-size:13px; padding:7px 8px; border-radius:5px; border:1px solid var(--wood-border);
+    background:rgba(0,0,0,.25); color:var(--text-muted); cursor:pointer;
+  }
+  .mode-switch button.active{ background:linear-gradient(180deg, var(--gold), var(--gold-soft)); color:#2a1d0f; font-weight:bold; }
+
+  .score-items{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .score-item{
+    border:1px solid var(--wood-border); border-radius:6px; padding:10px; background:rgba(0,0,0,.18);
+  }
+  .score-item-head{ display:flex; gap:8px; align-items:center; }
+  .score-item-head input[type=text]{ flex:1; }
+  .score-item-type{
+    font-family:var(--serif); font-size:12.5px; padding:6px 8px; border-radius:5px; border:1px solid var(--wood-border);
+    background:rgba(0,0,0,.3); color:var(--text-light);
+  }
+  .remove-x{ color:var(--red); cursor:pointer; font-size:14px; padding:2px 4px; }
+  .score-options{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .score-option-row{ display:flex; gap:6px; align-items:center; }
+  .score-option-row input[type=text]{ flex:1; }
+  .score-option-row input[type=number]{ width:70px; }
+  .small-input{ font-family:var(--serif); font-size:13.5px; padding:6px 8px; border-radius:5px; border:1px solid var(--wood-border); background:rgba(0,0,0,.3); color:var(--text-light); }
+  .add-link{ font-size:12.5px; color:var(--gold-soft); cursor:pointer; margin-top:6px; display:inline-block; }
+  .add-link:hover{ color:var(--gold); }
+  .minmax-row{ display:flex; gap:10px; margin-top:8px; align-items:center; flex-wrap:wrap; }
+  .minmax-row label{ font-size:12.5px; color:var(--text-muted); }
+  .minmax-row input{ width:80px; }
+
+  .interp-rows{ display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .interp-row{ display:flex; gap:6px; align-items:center; }
+  .interp-row input[type=number]{ width:70px; }
+  .interp-row input[type=text]{ flex:1; }
+
+  .calc-box{
+    margin-top:10px; border:1px solid var(--node-border); border-radius:7px; padding:12px;
+    background:rgba(44,88,119,.18);
+  }
+  .calc-item{ margin-bottom:12px; }
+  .calc-item-label{ font-size:14px; margin-bottom:6px; color:var(--text-light); }
+  .calc-options{ display:flex; flex-direction:column; gap:5px; }
+  .calc-option{ display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer; }
+  .calc-total-row{
+    display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px;
+    border-top:1px dashed var(--node-border); font-size:16px;
+  }
+  .calc-total-value{ color:var(--gold); font-weight:bold; font-size:20px; }
+  .calc-interp{ margin-top:6px; font-size:14px; color:var(--green); font-weight:bold; }
+
+  .gallery{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .gallery-item{ position:relative; width:96px; height:96px; border-radius:6px; overflow:hidden; border:1px solid var(--wood-border); }
+  .gallery-item img{ width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in; }
+  .gallery-remove{ position:absolute; top:2px; right:2px; background:rgba(0,0,0,.6); color:#fff; border:none; width:20px; height:20px; border-radius:50%; font-size:12px; cursor:pointer; line-height:1; }
+  .gallery-add{ width:96px; height:96px; border-radius:6px; border:2px dashed var(--gold-soft); color:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-size:26px; cursor:pointer; }
+
+  .attach-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  .attach-chip{ font-size:13px; background:rgba(0,0,0,.3); border:1px solid var(--wood-border); border-radius:5px; padding:6px 10px; display:flex; align-items:center; gap:8px; }
+  .attach-chip a{ color:var(--gold); text-decoration:underline; }
+  .attach-remove{ color:var(--red); cursor:pointer; font-size:12px; }
+
+  .detail-footer{ display:flex; justify-content:space-between; align-items:center; margin-top:22px; padding-top:14px; border-top:1px solid var(--wood-border); }
+  .danger-link{ color:var(--red); font-size:13px; cursor:pointer; text-decoration:underline; }
+  .save-status{ font-size:12px; color:var(--text-muted); font-style:italic; }
+
+  .mini-modal{
+    width:100%; max-width:420px; background:linear-gradient(180deg, var(--bg-main-alt), var(--bg-main));
+    border:5px solid var(--wood); box-shadow:0 0 0 2px var(--wood-border), 0 18px 40px rgba(0,0,0,.6);
+    border-radius:10px; padding:20px; text-align:left; max-height:88vh; overflow-y:auto;
+  }
+  .mini-modal.center-text{ text-align:center; }
+  .mini-modal h3{ margin:0 0 12px; color:var(--gold); font-size:17px; }
+  .mini-modal p{ font-size:14.5px; line-height:1.5; margin:0 0 14px; }
+  .mini-modal-actions{ display:flex; gap:10px; justify-content:center; margin-top:16px; }
+  .btn-cancel{ background:rgba(0,0,0,.3); color:var(--text-light); }
+  .btn-danger{ background:linear-gradient(180deg,#c45a51,var(--red)); color:#fff; font-weight:bold; }
+  .sync-status-line{ font-size:12.5px; margin-top:10px; color:var(--text-muted); }
+  .code-block{ font-family:monospace; font-size:11.5px; background:rgba(0,0,0,.35); padding:8px; border-radius:5px; white-space:pre-wrap; word-break:break-all; color:var(--text-muted); }
+
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; z-index:90; padding:20px; }
+  .lightbox.hidden{ display:none; }
+  .lightbox img{ max-width:100%; max-height:100%; border-radius:6px; }
+
+  @media (max-width:560px){
+    .app-title{ font-size:18px; }
+    .detail-panel{ padding:18px 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="app-header">
+    <div class="app-title-row">
+      <div>
+        <h1 class="app-title">Kho Thang Điểm &amp; Test Đánh Giá PHCN</h1>
+        <p class="app-subtitle">Thư viện các thang điểm, bộ câu hỏi và test đánh giá dùng trong phục hồi chức năng</p>
+      </div>
+      <div class="header-actions">
+        <span class="sync-badge" id="syncBadge">🔒 Chỉ lưu trên máy</span>
+        <button class="icon-btn" id="syncSettingsBtn">⇄ Đồng bộ</button>
+        <button class="icon-btn" id="exportBtn">⇩ Xuất</button>
+        <button class="icon-btn" id="importBtn">⇧ Nhập</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="Tìm thang điểm trong mục này…">
+      <button class="btn btn-gold" id="addScaleBtn">+ Thêm thang điểm</button>
+    </div>
+  </header>
+
+  <nav class="tab-bar" id="tabBar"></nav>
+  <main class="grid-area" id="gridArea"></main>
+</div>
+
+<div class="tooltip hidden" id="tooltip"></div>
+
+<div class="overlay hidden" id="detailOverlay">
+  <div class="detail-panel" id="detailPanel"></div>
+</div>
+
+<div class="overlay hidden" id="miniModalOverlay">
+  <div class="mini-modal" id="miniModal"></div>
+</div>
+
+<div class="lightbox hidden" id="lightbox"><img id="lightboxImg" src="" alt=""></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var LOCAL_KEY = "rehabLibData_v1";
+  var LAST_UPDATE_KEY = "rehabLibLastUpdate_v1";
+  var SYNC_CONFIG_KEY = "rehabLibSyncConfig_v1";
+  var FIREBASE_APP_JS = "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js";
+  var FIREBASE_FS_JS = "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js";
+
+  var DATA = null;
+  var activeCategoryId = null;
+  var currentScaleId = null;
+  var persistTimer = null;
+  var longPressTimer = null;
+  var suppressClick = false;
+  var docRef = null;
+  var fsUnsubscribe = null;
+  var lastPushedPayload = null;
+  var pendingRemotePayload = null;
+
+  /* ---------------- utils ---------------- */
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function stripDiacritics(str){ return (str||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D"); }
+  function normSearch(str){ return stripDiacritics(str||"").toLowerCase(); }
+  function escapeHtml(str){ return (str||"").replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
+  function randomCode(){
+    var chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    var out = "";
+    for(var i=0;i<16;i++){ out += chars[Math.floor(Math.random()*chars.length)]; if(i===3||i===7||i===11) out += "-"; }
+    return out;
+  }
+
+  /* ---------------- seed data ---------------- */
+  function seedData(){
+    var cats = [
+      {id:"cat_ho_hap", name:"Hô hấp"},
+      {id:"cat_tim_mach", name:"Tim mạch"},
+      {id:"cat_co_xuong_khop", name:"Cơ Xương Khớp"},
+      {id:"cat_van_dong", name:"Vận động – Chức năng"}
+    ];
+    function blank(cat, title, shortDesc){
+      return {id:uid(), categoryId:cat, title:title, shortDesc:shortDesc, detail:"", tableContent:"", mode:"text", scoreItems:[], interpretations:[], images:[], attachment:null};
+    }
+    var scales = [
+      blank("cat_ho_hap","Thang điểm khó thở mMRC","Đánh giá mức độ khó thở trong sinh hoạt hằng ngày."),
+      blank("cat_ho_hap","CAT (COPD Assessment Test)","Bộ câu hỏi đánh giá ảnh hưởng của COPD lên cuộc sống người bệnh."),
+      blank("cat_ho_hap","Test đi bộ 6 phút (6MWT)","Đánh giá khả năng gắng sức và chức năng hô hấp – tuần hoàn."),
+      blank("cat_tim_mach","Phân độ NYHA","Phân độ mức độ suy tim theo khả năng gắng sức."),
+      blank("cat_tim_mach","Thang điểm Borg","Đánh giá cảm nhận mức độ gắng sức / khó thở khi vận động."),
+      blank("cat_co_xuong_khop","Thang điểm đau VAS","Đánh giá mức độ đau theo thang nhìn tương tự."),
+      blank("cat_co_xuong_khop","Chỉ số Oswestry (ODI)","Đánh giá mức độ ảnh hưởng của đau thắt lưng lên chức năng."),
+      blank("cat_van_dong","Chỉ số Barthel (ADL)","Đánh giá mức độ độc lập trong sinh hoạt hằng ngày."),
+      blank("cat_van_dong","Thang thăng bằng Berg (BBS)","Đánh giá khả năng thăng bằng, nguy cơ té ngã."),
+      blank("cat_van_dong","Timed Up and Go (TUG)","Đánh giá nhanh khả năng di chuyển và nguy cơ té ngã.")
+    ];
+    return {categories:cats, scales:scales};
+  }
+
+  /* ---------------- local storage ---------------- */
+  function loadLocalData(){
+    try{
+      var raw = localStorage.getItem(LOCAL_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+  function saveLocalData(){
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(DATA));
+    localStorage.setItem(LAST_UPDATE_KEY, String(Date.now()));
+  }
+  function migrateScale(s){
+    if(s.mode === undefined) s.mode = "text";
+    if(s.scoreItems === undefined) s.scoreItems = [];
+    if(s.interpretations === undefined) s.interpretations = [];
+    if(s.tableContent === undefined) s.tableContent = "";
+    return s;
+  }
+
+  function schedulePersist(showStatus){
+    saveLocalData();
+    if(showStatus) setSaveStatus("Đã lưu trên máy.");
+    clearTimeout(persistTimer);
+    if(docRef){
+      persistTimer = setTimeout(function(){
+        pushToCloud();
+        if(showStatus) setSaveStatus("Đã lưu và đồng bộ.");
+      }, 700);
+    }
+  }
+  function setSaveStatus(text){
+    var el = document.getElementById("saveStatus");
+    if(el){ el.textContent = text; }
+  }
+  function setSyncBadge(on, text){
+    var b = document.getElementById("syncBadge");
+    if(!b) return;
+    b.textContent = text;
+    b.className = "sync-badge" + (on ? " on" : "");
+  }
+
+  /* ---------------- cloud sync (Firebase Firestore) ---------------- */
+  function loadSyncConfig(){
+    try{
+      var raw = localStorage.getItem(SYNC_CONFIG_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+  function saveSyncConfig(cfg){
+    localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg));
+  }
+  function clearSyncConfig(){
+    localStorage.removeItem(SYNC_CONFIG_KEY);
+  }
+
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function(){ reject(new Error("Không tải được " + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadFirebaseSDK(){
+    if(window.firebase && window.firebase.firestore) return Promise.resolve();
+    return loadScript(FIREBASE_APP_JS).then(function(){ return loadScript(FIREBASE_FS_JS); });
+  }
+
+  function parseFirebaseConfigText(text){
+    try{ return JSON.parse(text); }catch(e){}
+    try{
+      var match = text.match(/\{[\s\S]*\}/);
+      if(match){ return (new Function("return (" + match[0] + ");"))(); }
+    }catch(e){}
+    return null;
+  }
+
+  function initFirebaseSync(cfg, silent){
+    if(!silent) setSyncBadge(false, "Đang kết nối…");
+    return loadFirebaseSDK().then(function(){
+      if(!window.firebase.apps || !window.firebase.apps.length){
+        window.firebase.initializeApp(cfg.config);
+      }
+      var db = window.firebase.firestore();
+      try{ db.enablePersistence({synchronizeTabs:true}).catch(function(){}); }catch(e){}
+      docRef = db.collection("rehabLibraries").doc(cfg.syncCode);
+
+      return docRef.get().then(function(snap){
+        if(snap.exists){
+          var remote = snap.data();
+          var remoteAt = remote.updatedAtMillis || 0;
+          var localAt = Number(localStorage.getItem(LAST_UPDATE_KEY) || 0);
+          if(remoteAt > localAt){
+            applyRemoteData(remote.payload);
+          } else {
+            pushToCloud();
+          }
+        } else {
+          pushToCloud();
+        }
+        subscribeToCloud();
+        setSyncBadge(true, "☁ Đã đồng bộ");
+      });
+    }).catch(function(err){
+      setSyncBadge(false, "⚠ Lỗi đồng bộ");
+      console.error(err);
+      throw err;
+    });
+  }
+
+  function subscribeToCloud(){
+    if(fsUnsubscribe){ fsUnsubscribe(); }
+    fsUnsubscribe = docRef.onSnapshot(function(snap){
+      if(!snap.exists) return;
+      var data = snap.data();
+      if(data.payload === lastPushedPayload) return;
+      var overlayOpen = !document.getElementById("detailOverlay").classList.contains("hidden");
+      if(overlayOpen){
+        pendingRemotePayload = data.payload;
+      } else {
+        applyRemoteData(data.payload);
+      }
+    }, function(err){
+      setSyncBadge(false, "⚠ Mất kết nối đồng bộ");
+      console.error(err);
+    });
+  }
+
+  function applyRemoteData(payloadStr){
+    try{
+      var parsed = JSON.parse(payloadStr);
+      parsed.scales = (parsed.scales||[]).map(migrateScale);
+      DATA = parsed;
+      localStorage.setItem(LOCAL_KEY, payloadStr);
+      localStorage.setItem(LAST_UPDATE_KEY, String(Date.now()));
+      if(!DATA.categories.some(function(c){ return c.id === activeCategoryId; })){
+        activeCategoryId = DATA.categories.length ? DATA.categories[0].id : null;
+      }
+      renderTabs();
+      renderGrid();
+      setSyncBadge(true, "☁ Đã đồng bộ " + new Date().toLocaleTimeString("vi-VN"));
+    }catch(e){ console.error(e); }
+  }
+
+  function pushToCloud(){
+    if(!docRef) return;
+    var payload = JSON.stringify(DATA);
+    lastPushedPayload = payload;
+    docRef.set({payload:payload, updatedAtMillis:Date.now()}).catch(function(err){
+      setSyncBadge(false, "⚠ Lỗi đồng bộ");
+      console.error(err);
+    });
+  }
+
+  function disconnectSync(){
+    if(fsUnsubscribe){ fsUnsubscribe(); fsUnsubscribe = null; }
+    docRef = null;
+    clearSyncConfig();
+    setSyncBadge(false, "🔒 Chỉ lưu trên máy");
+  }
+
+  /* ---------------- tabs ---------------- */
+  function renderTabs(){
+    var bar = document.getElementById("tabBar");
+    bar.innerHTML = "";
+    DATA.categories.forEach(function(cat){
+      var tab = document.createElement("div");
+      tab.className = "tab" + (cat.id === activeCategoryId ? " active" : "");
+      tab.dataset.id = cat.id;
+
+      var label = document.createElement("span");
+      label.className = "tab-label";
+      label.textContent = cat.name;
+      tab.appendChild(label);
+
+      var close = document.createElement("span");
+      close.className = "tab-close";
+      close.textContent = "✕";
+      close.title = "Xóa mục";
+      close.addEventListener("click", function(e){ e.stopPropagation(); confirmDeleteCategory(cat.id); });
+      tab.appendChild(close);
+
+      tab.addEventListener("click", function(){
+        if(tab.getAttribute("contenteditable") === "true") return;
+        if(cat.id === activeCategoryId) return;
+        activeCategoryId = cat.id;
+        document.getElementById("searchInput").value = "";
+        renderTabs();
+        renderGrid();
+      });
+
+      tab.addEventListener("dblclick", function(){
+        label.setAttribute("contenteditable","true");
+        tab.setAttribute("contenteditable","true");
+        label.focus();
+        selectAllText(label);
+        function finish(){
+          label.removeAttribute("contenteditable");
+          tab.removeAttribute("contenteditable");
+          cat.name = label.textContent.trim() || "Mục không tên";
+          schedulePersist();
+          renderTabs();
+          label.removeEventListener("blur", finish);
+        }
+        label.addEventListener("blur", finish);
+        label.addEventListener("keydown", function(e){
+          if(e.key === "Enter"){ e.preventDefault(); label.blur(); }
+          if(e.key === "Escape"){ label.textContent = cat.name; label.blur(); }
+        });
+      });
+
+      bar.appendChild(tab);
+    });
+
+    var addTab = document.createElement("div");
+    addTab.className = "tab-add";
+    addTab.textContent = "+";
+    addTab.title = "Thêm mục mới";
+    addTab.addEventListener("click", addCategory);
+    bar.appendChild(addTab);
+  }
+
+  function selectAllText(el){
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function addCategory(){
+    var name = "Mục mới";
+    var n = 1;
+    var existingNames = DATA.categories.map(function(c){ return c.name; });
+    while(existingNames.indexOf(name) !== -1){ n++; name = "Mục mới " + n; }
+    var cat = {id: uid(), name: name};
+    DATA.categories.push(cat);
+    activeCategoryId = cat.id;
+    schedulePersist();
+    renderTabs();
+    renderGrid();
+    setTimeout(function(){
+      var tabs = document.querySelectorAll(".tab");
+      var lastTab = tabs[tabs.length-1];
+      if(lastTab){ lastTab.dispatchEvent(new Event("dblclick", {bubbles:true})); }
+    }, 30);
+  }
+
+  function confirmDeleteCategory(id){
+    var cat = DATA.categories.find(function(c){ return c.id === id; });
+    if(!cat) return;
+    var count = DATA.scales.filter(function(s){ return s.categoryId === id; }).length;
+    showConfirmModal(
+      "Xóa mục",
+      "Xóa mục \"" + cat.name + "\"" + (count ? " và " + count + " thang điểm bên trong" : "") + "? Hành động này không thể hoàn tác.",
+      function(){
+        DATA.categories = DATA.categories.filter(function(c){ return c.id !== id; });
+        DATA.scales = DATA.scales.filter(function(s){ return s.categoryId !== id; });
+        if(activeCategoryId === id){ activeCategoryId = DATA.categories.length ? DATA.categories[0].id : null; }
+        schedulePersist();
+        renderTabs();
+        renderGrid();
+      }
+    );
+  }
+
+  /* ---------------- grid ---------------- */
+  var CLIPBOARD_ICON = '<svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M9 12l2 2 4-4"/></svg>';
+
+  function renderGrid(){
+    var area = document.getElementById("gridArea");
+    area.innerHTML = "";
+    if(!activeCategoryId){
+      area.innerHTML = '<p class="empty-hint">Chưa có mục nào. Bấm dấu "+" trên thanh tab để tạo mục đầu tiên.</p>';
+      return;
+    }
+    var query = normSearch(document.getElementById("searchInput").value);
+    var scales = DATA.scales.filter(function(s){
+      return s.categoryId === activeCategoryId && (!query || normSearch(s.title).indexOf(query) !== -1);
+    });
+
+    var grid = document.createElement("div");
+    grid.className = "node-grid";
+
+    scales.forEach(function(s){
+      var filled = !!((s.detail && s.detail.trim()) || (s.tableContent && s.tableContent.trim()) || (s.scoreItems && s.scoreItems.length) || (s.images && s.images.length));
+      var node = document.createElement("div");
+      node.className = "node" + (filled ? "" : " empty");
+      node.innerHTML = CLIPBOARD_ICON + '<div class="node-title"></div>' + (filled ? '<div class="node-check">✓</div>' : "");
+      node.querySelector(".node-title").textContent = s.title || "(Chưa đặt tên)";
+      attachNodeInteractions(node, s);
+      grid.appendChild(node);
+    });
+
+    var addNode = document.createElement("div");
+    addNode.className = "node-add";
+    addNode.textContent = "+";
+    addNode.title = "Thêm thang điểm mới";
+    addNode.addEventListener("click", addScale);
+    grid.appendChild(addNode);
+
+    area.appendChild(grid);
+  }
+
+  function attachNodeInteractions(node, scale){
+    node.addEventListener("mouseenter", function(e){ showTooltip(scale.shortDesc || "Chưa có ghi chú.", e.clientX, e.clientY); });
+    node.addEventListener("mousemove", function(e){ moveTooltip(e.clientX, e.clientY); });
+    node.addEventListener("mouseleave", hideTooltip);
+
+    node.addEventListener("touchstart", function(e){
+      var touch = e.touches[0];
+      longPressTimer = setTimeout(function(){
+        showTooltip(scale.shortDesc || "Chưa có ghi chú.", touch.clientX, touch.clientY);
+        suppressClick = true;
+      }, 480);
+    }, {passive:true});
+    node.addEventListener("touchmove", function(){ clearTimeout(longPressTimer); }, {passive:true});
+    node.addEventListener("touchend", function(){ clearTimeout(longPressTimer); hideTooltip(); });
+
+    node.addEventListener("click", function(){
+      if(suppressClick){ suppressClick = false; return; }
+      openDetail(scale.id);
+    });
+  }
+
+  function showTooltip(text, x, y){
+    var tip = document.getElementById("tooltip");
+    tip.textContent = text;
+    tip.classList.remove("hidden");
+    moveTooltip(x, y);
+  }
+  function moveTooltip(x, y){
+    var tip = document.getElementById("tooltip");
+    tip.style.left = Math.min(x + 14, window.innerWidth - 250) + "px";
+    tip.style.top = Math.min(y + 14, window.innerHeight - 80) + "px";
+  }
+  function hideTooltip(){ document.getElementById("tooltip").classList.add("hidden"); }
+
+  /* ---------------- add / delete scale ---------------- */
+  function addScale(){
+    var s = {id:uid(), categoryId:activeCategoryId, title:"Thang điểm mới", shortDesc:"", detail:"", tableContent:"", mode:"text", scoreItems:[], interpretations:[], images:[], attachment:null};
+    DATA.scales.push(s);
+    schedulePersist();
+    renderGrid();
+    openDetail(s.id, true);
+  }
+
+  function confirmDeleteScale(id){
+    var s = DATA.scales.find(function(x){ return x.id === id; });
+    if(!s) return;
+    showConfirmModal(
+      "Xóa thang điểm",
+      "Xóa thang điểm \"" + s.title + "\"? Toàn bộ nội dung, ảnh và tệp đính kèm sẽ mất, không thể hoàn tác.",
+      function(){
+        DATA.scales = DATA.scales.filter(function(x){ return x.id !== id; });
+        schedulePersist();
+        closeDetail(true);
+        renderGrid();
+      }
+    );
+  }
+
+  /* ---------------- detail overlay ---------------- */
+  function openDetail(id, focusTitle){
+    currentScaleId = id;
+    renderDetailPanel();
+    document.getElementById("detailOverlay").classList.remove("hidden");
+    if(focusTitle){
+      setTimeout(function(){
+        var el = document.getElementById("titleInput");
+        if(el){ el.focus(); el.select(); }
+      }, 30);
+    }
+  }
+  function closeDetail(skipPending){
+    document.getElementById("detailOverlay").classList.add("hidden");
+    currentScaleId = null;
+    if(!skipPending && pendingRemotePayload){
+      var p = pendingRemotePayload; pendingRemotePayload = null;
+      applyRemoteData(p);
+    } else {
+      pendingRemotePayload = null;
+      renderGrid();
+    }
+  }
+
+  function getCurrentScale(){ return DATA.scales.find(function(s){ return s.id === currentScaleId; }); }
+
+  function updateField(field, value){
+    var s = getCurrentScale();
+    if(!s) return;
+    s[field] = value;
+    schedulePersist(true);
+  }
+
+  function renderDetailPanel(){
+    var s = getCurrentScale();
+    var panel = document.getElementById("detailPanel");
+    if(!s){ panel.innerHTML = ""; return; }
+
+    panel.innerHTML =
+      '<button class="btn-close" id="closeDetailBtn">✕</button>' +
+      '<label class="field-label">Tên thang điểm</label>' +
+      '<input type="text" class="field-input title-input" id="titleInput">' +
+
+      '<label class="field-label">Ý nghĩa (ghi chú ngắn hiện khi rê chuột / giữ vào ô)</label>' +
+      '<textarea class="field-textarea" id="shortDescInput" rows="2"></textarea>' +
+
+      '<label class="field-label">Ý nghĩa cụ thể / hướng dẫn sử dụng</label>' +
+      '<textarea class="field-textarea" id="detailInput" rows="4"></textarea>' +
+
+      '<label class="field-label">Nội dung bảng điểm chi tiết</label>' +
+      '<div class="mode-switch">' +
+        '<button id="modeTextBtn" type="button">Văn bản tự do</button>' +
+        '<button id="modeCalcBtn" type="button">Bảng tính điểm tương tác</button>' +
+      '</div>' +
+      '<div id="modeArea"></div>' +
+
+      '<label class="field-label">Hình ảnh minh họa</label>' +
+      '<div class="gallery" id="gallery"></div>' +
+
+      '<label class="field-label">Tệp đính kèm gốc (tuỳ chọn, nên dưới 4MB)</label>' +
+      '<div class="attach-row" id="attachRow"></div>' +
+      '<input type="file" id="attachFileInput" style="display:none">' +
+      '<button class="icon-btn" id="attachBtn" style="margin-top:8px;">+ Đính kèm tệp</button>' +
+
+      '<div class="detail-footer">' +
+        '<span class="danger-link" id="deleteScaleBtn">Xóa thang điểm này</span>' +
+        '<span class="save-status" id="saveStatus"></span>' +
+      '</div>';
+
+    document.getElementById("titleInput").value = s.title || "";
+    document.getElementById("shortDescInput").value = s.shortDesc || "";
+    document.getElementById("detailInput").value = s.detail || "";
+
+    document.getElementById("titleInput").addEventListener("input", function(){ updateField("title", this.value); });
+    document.getElementById("shortDescInput").addEventListener("input", function(){ updateField("shortDesc", this.value); });
+    document.getElementById("detailInput").addEventListener("input", function(){ updateField("detail", this.value); });
+    document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
+    document.getElementById("deleteScaleBtn").addEventListener("click", function(){ confirmDeleteScale(s.id); });
+
+    document.getElementById("modeTextBtn").addEventListener("click", function(){ s.mode = "text"; schedulePersist(); renderModeArea(); updateModeButtons(); });
+    document.getElementById("modeCalcBtn").addEventListener("click", function(){ s.mode = "calc"; schedulePersist(); renderModeArea(); updateModeButtons(); });
+    updateModeButtons();
+    renderModeArea();
+
+    renderGallery();
+    renderAttachment();
+
+    document.getElementById("attachBtn").addEventListener("click", function(){ document.getElementById("attachFileInput").click(); });
+    document.getElementById("attachFileInput").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(file) handleAttachment(file);
+      e.target.value = "";
+    });
+  }
+
+  function updateModeButtons(){
+    var s = getCurrentScale();
+    document.getElementById("modeTextBtn").className = s.mode === "text" ? "active" : "";
+    document.getElementById("modeCalcBtn").className = s.mode === "calc" ? "active" : "";
+  }
+
+  /* ---------- text mode ---------- */
+  function renderModeArea(){
+    var s = getCurrentScale();
+    var area = document.getElementById("modeArea");
+    if(s.mode === "calc"){
+      renderCalcBuilder(area);
+    } else {
+      area.innerHTML =
+        '<textarea class="field-textarea" id="tableInput" rows="8" placeholder="Dán hoặc gõ nội dung bảng điểm tại đây (từng mục, từng dòng điểm số…)."></textarea>' +
+        '<div class="field-hint">Mẹo: mở file Word gốc, chọn toàn bộ bảng, dán trực tiếp vào đây. Nếu thang điểm có các mục chọn-và-cộng điểm, hãy thử chuyển sang "Bảng tính điểm tương tác" để tự động cộng điểm khi dùng.</div>';
+      document.getElementById("tableInput").value = s.tableContent || "";
+      document.getElementById("tableInput").addEventListener("input", function(){ updateField("tableContent", this.value); });
+    }
+  }
+
+  /* ---------- interactive score builder ---------- */
+  function renderCalcBuilder(area){
+    var s = getCurrentScale();
+    area.innerHTML =
+      '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục đánh giá. Mỗi mục có thể là "chọn 1 đáp án" (mỗi đáp án gắn số điểm), "chọn nhiều đáp án – cộng dồn" (mỗi đáp án được tick sẽ cộng điểm riêng, dùng cho các mục kiểu CAT/checklist triệu chứng), hoặc "nhập số" (ví dụ thang đau 0–10). App sẽ tự cộng điểm và hiện kết quả bên dưới.</div>' +
+      '<div class="score-items" id="scoreItemsWrap"></div>' +
+      '<span class="add-link" id="addScoreItem">+ Thêm mục đánh giá</span>' +
+      '<label class="field-label">Diễn giải theo tổng điểm (tuỳ chọn)</label>' +
+      '<div class="interp-rows" id="interpRows"></div>' +
+      '<span class="add-link" id="addInterp">+ Thêm mức diễn giải</span>' +
+      '<label class="field-label">Xem thử bảng tính điểm</label>' +
+      '<div class="calc-box" id="calcPreview"></div>';
+
+    renderScoreItems();
+    renderInterpRows();
+    renderCalcPreview();
+
+    document.getElementById("addScoreItem").addEventListener("click", function(){
+      s.scoreItems.push({id:uid(), label:"Mục mới", type:"choice", options:[{label:"Không có", points:0},{label:"Có", points:1}], min:0, max:10});
+      schedulePersist();
+      renderScoreItems();
+      renderCalcPreview();
+    });
+    document.getElementById("addInterp").addEventListener("click", function(){
+      s.interpretations.push({min:0, max:0, label:""});
+      schedulePersist();
+      renderInterpRows();
+    });
+  }
+
+  function renderScoreItems(){
+    var s = getCurrentScale();
+    var wrap = document.getElementById("scoreItemsWrap");
+    wrap.innerHTML = "";
+    s.scoreItems.forEach(function(item, idx){
+      var box = document.createElement("div");
+      box.className = "score-item";
+
+      var head = document.createElement("div");
+      head.className = "score-item-head";
+
+      var labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.className = "small-input";
+      labelInput.value = item.label;
+      labelInput.placeholder = "Tên mục (VD: Khả năng đi lại)";
+      labelInput.addEventListener("input", function(){ item.label = this.value; schedulePersist(); renderCalcPreview(); });
+
+      var typeSelect = document.createElement("select");
+      typeSelect.className = "score-item-type";
+      typeSelect.innerHTML = '<option value="choice">Chọn 1 đáp án</option><option value="multi">Chọn nhiều đáp án (cộng dồn)</option><option value="number">Nhập số</option>';
+      typeSelect.value = item.type;
+      typeSelect.addEventListener("change", function(){
+        item.type = this.value;
+        schedulePersist();
+        renderScoreItems();
+        renderCalcPreview();
+      });
+
+      var rm = document.createElement("span");
+      rm.className = "remove-x";
+      rm.textContent = "✕";
+      rm.addEventListener("click", function(){
+        s.scoreItems.splice(idx,1);
+        schedulePersist();
+        renderScoreItems();
+        renderCalcPreview();
+      });
+
+      head.appendChild(labelInput);
+      head.appendChild(typeSelect);
+      head.appendChild(rm);
+      box.appendChild(head);
+
+      if(item.type === "choice" || item.type === "multi"){
+        var optWrap = document.createElement("div");
+        optWrap.className = "score-options";
+        (item.options||[]).forEach(function(opt, oi){
+          var row = document.createElement("div");
+          row.className = "score-option-row";
+          var optLabel = document.createElement("input");
+          optLabel.type = "text";
+          optLabel.className = "small-input";
+          optLabel.value = opt.label;
+          optLabel.placeholder = "Nội dung đáp án";
+          optLabel.addEventListener("input", function(){ opt.label = this.value; schedulePersist(); renderCalcPreview(); });
+          var optPoints = document.createElement("input");
+          optPoints.type = "number";
+          optPoints.className = "small-input";
+          optPoints.value = opt.points;
+          optPoints.addEventListener("input", function(){ opt.points = Number(this.value)||0; schedulePersist(); renderCalcPreview(); });
+          var optRm = document.createElement("span");
+          optRm.className = "remove-x";
+          optRm.textContent = "✕";
+          optRm.addEventListener("click", function(){
+            item.options.splice(oi,1);
+            schedulePersist();
+            renderScoreItems();
+            renderCalcPreview();
+          });
+          row.appendChild(optLabel);
+          row.appendChild(optPoints);
+          row.appendChild(optRm);
+          optWrap.appendChild(row);
+        });
+        box.appendChild(optWrap);
+        var addOpt = document.createElement("span");
+        addOpt.className = "add-link";
+        addOpt.textContent = "+ Thêm đáp án";
+        addOpt.addEventListener("click", function(){
+          item.options.push({label:"Đáp án mới", points:0});
+          schedulePersist();
+          renderScoreItems();
+          renderCalcPreview();
+        });
+        box.appendChild(addOpt);
+      } else {
+        var mm = document.createElement("div");
+        mm.className = "minmax-row";
+        mm.innerHTML = '<label>Từ</label>';
+        var minInput = document.createElement("input");
+        minInput.type = "number"; minInput.className = "small-input"; minInput.value = item.min;
+        minInput.addEventListener("input", function(){ item.min = Number(this.value)||0; schedulePersist(); renderCalcPreview(); });
+        var toLabel = document.createElement("label"); toLabel.textContent = "đến";
+        var maxInput = document.createElement("input");
+        maxInput.type = "number"; maxInput.className = "small-input"; maxInput.value = item.max;
+        maxInput.addEventListener("input", function(){ item.max = Number(this.value)||0; schedulePersist(); renderCalcPreview(); });
+        mm.appendChild(minInput); mm.appendChild(toLabel); mm.appendChild(maxInput);
+        box.appendChild(mm);
+      }
+
+      wrap.appendChild(box);
+    });
+  }
+
+  function renderInterpRows(){
+    var s = getCurrentScale();
+    var wrap = document.getElementById("interpRows");
+    wrap.innerHTML = "";
+    s.interpretations.forEach(function(rule, idx){
+      var row = document.createElement("div");
+      row.className = "interp-row";
+      var minI = document.createElement("input"); minI.type="number"; minI.className="small-input"; minI.value=rule.min; minI.placeholder="Từ";
+      minI.addEventListener("input", function(){ rule.min = Number(this.value)||0; schedulePersist(); renderCalcPreview(); });
+      var dash = document.createElement("span"); dash.textContent = "–"; dash.style.color = "var(--text-muted)";
+      var maxI = document.createElement("input"); maxI.type="number"; maxI.className="small-input"; maxI.value=rule.max; maxI.placeholder="Đến";
+      maxI.addEventListener("input", function(){ rule.max = Number(this.value)||0; schedulePersist(); renderCalcPreview(); });
+      var labelI = document.createElement("input"); labelI.type="text"; labelI.className="small-input"; labelI.value=rule.label; labelI.placeholder="Ý nghĩa (VD: Mức độ nhẹ)";
+      labelI.addEventListener("input", function(){ rule.label = this.value; schedulePersist(); renderCalcPreview(); });
+      var rm = document.createElement("span"); rm.className="remove-x"; rm.textContent="✕";
+      rm.addEventListener("click", function(){ s.interpretations.splice(idx,1); schedulePersist(); renderInterpRows(); renderCalcPreview(); });
+      row.appendChild(minI); row.appendChild(dash); row.appendChild(maxI); row.appendChild(labelI); row.appendChild(rm);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderCalcPreview(){
+    var s = getCurrentScale();
+    var box = document.getElementById("calcPreview");
+    if(!box) return;
+    box.innerHTML = "";
+    if(!s.scoreItems.length){
+      box.innerHTML = '<div class="field-hint">Chưa có mục đánh giá nào — thêm mục ở trên để xem bảng tính điểm.</div>';
+      return;
+    }
+    var currentValues = {};
+    s.scoreItems.forEach(function(item){ currentValues[item.id] = item.type === "multi" ? 0 : null; });
+
+    s.scoreItems.forEach(function(item){
+      var itemDiv = document.createElement("div");
+      itemDiv.className = "calc-item";
+      var lbl = document.createElement("div");
+      lbl.className = "calc-item-label";
+      lbl.textContent = item.label;
+      itemDiv.appendChild(lbl);
+
+      if(item.type === "choice"){
+        var optsDiv = document.createElement("div");
+        optsDiv.className = "calc-options";
+        (item.options||[]).forEach(function(opt, oi){
+          var lab = document.createElement("label");
+          lab.className = "calc-option";
+          var radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "calc_" + item.id;
+          radio.addEventListener("change", function(){
+            currentValues[item.id] = opt.points;
+            updateTotal();
+          });
+          lab.appendChild(radio);
+          var span = document.createElement("span");
+          span.textContent = (opt.label || "(không có nhãn)") + "  (" + opt.points + " điểm)";
+          lab.appendChild(span);
+          optsDiv.appendChild(lab);
+        });
+        itemDiv.appendChild(optsDiv);
+      } else if(item.type === "multi"){
+        var checkDiv = document.createElement("div");
+        checkDiv.className = "calc-options";
+        var selectedPoints = {};
+        (item.options||[]).forEach(function(opt, oi){
+          var lab = document.createElement("label");
+          lab.className = "calc-option";
+          var checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.addEventListener("change", function(){
+            if(this.checked){ selectedPoints[oi] = opt.points; }
+            else { delete selectedPoints[oi]; }
+            var sum = 0;
+            Object.keys(selectedPoints).forEach(function(k){ sum += selectedPoints[k]; });
+            currentValues[item.id] = sum;
+            updateTotal();
+          });
+          lab.appendChild(checkbox);
+          var span = document.createElement("span");
+          span.textContent = (opt.label || "(không có nhãn)") + "  (" + opt.points + " điểm)";
+          lab.appendChild(span);
+          checkDiv.appendChild(lab);
+        });
+        itemDiv.appendChild(checkDiv);
+      } else {
+        var numInput = document.createElement("input");
+        numInput.type = "number";
+        numInput.className = "small-input";
+        numInput.min = item.min; numInput.max = item.max;
+        numInput.placeholder = item.min + " – " + item.max;
+        numInput.addEventListener("input", function(){
+          var v = this.value === "" ? null : Number(this.value);
+          currentValues[item.id] = v;
+          updateTotal();
+        });
+        itemDiv.appendChild(numInput);
+      }
+      box.appendChild(itemDiv);
+    });
+
+    var totalRow = document.createElement("div");
+    totalRow.className = "calc-total-row";
+    totalRow.innerHTML = '<span>Tổng điểm</span><span class="calc-total-value" id="calcTotalValue">–</span>';
+    box.appendChild(totalRow);
+    var interpDiv = document.createElement("div");
+    interpDiv.className = "calc-interp";
+    interpDiv.id = "calcInterpValue";
+    box.appendChild(interpDiv);
+
+    function updateTotal(){
+      var anyNull = s.scoreItems.some(function(item){ return currentValues[item.id] === null; });
+      var total = 0;
+      s.scoreItems.forEach(function(item){ total += currentValues[item.id] || 0; });
+      document.getElementById("calcTotalValue").textContent = anyNull ? total + " (chưa đủ mục)" : total;
+      var interpEl = document.getElementById("calcInterpValue");
+      var match = (s.interpretations||[]).find(function(r){ return total >= r.min && total <= r.max; });
+      interpEl.textContent = match && match.label ? match.label : "";
+    }
+  }
+
+  /* ---------------- gallery / attachments ---------------- */
+  function renderGallery(){
+    var s = getCurrentScale();
+    var gal = document.getElementById("gallery");
+    if(!gal || !s) return;
+    gal.innerHTML = "";
+    (s.images || []).forEach(function(src, idx){
+      var item = document.createElement("div");
+      item.className = "gallery-item";
+      var img = document.createElement("img");
+      img.src = src;
+      img.addEventListener("click", function(){ openLightbox(src); });
+      var rm = document.createElement("button");
+      rm.className = "gallery-remove";
+      rm.textContent = "✕";
+      rm.addEventListener("click", function(){ s.images.splice(idx,1); schedulePersist(true); renderGallery(); });
+      item.appendChild(img);
+      item.appendChild(rm);
+      gal.appendChild(item);
+    });
+    var add = document.createElement("div");
+    add.className = "gallery-add";
+    add.textContent = "+";
+    add.addEventListener("click", function(){
+      var input = document.createElement("input");
+      input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
+      document.body.appendChild(input);
+      input.addEventListener("change", function(e){ handleImageFiles(e.target.files); document.body.removeChild(input); });
+      input.click();
+    });
+    gal.appendChild(add);
+  }
+
+  function handleImageFiles(fileList){
+    var s = getCurrentScale();
+    if(!s) return;
+    if(!s.images) s.images = [];
+    Array.prototype.forEach.call(fileList, function(file){
+      resizeImage(file, 1000, 0.82).then(function(dataUrl){
+        s.images.push(dataUrl);
+        schedulePersist(true);
+        renderGallery();
+      });
+    });
+  }
+
+  function resizeImage(file, maxDim, quality){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(e){
+        var img = new Image();
+        img.onload = function(){
+          var w = img.width, h = img.height;
+          if(w > maxDim || h > maxDim){
+            if(w > h){ h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function openLightbox(src){
+    document.getElementById("lightboxImg").src = src;
+    document.getElementById("lightbox").classList.remove("hidden");
+  }
+
+  function renderAttachment(){
+    var s = getCurrentScale();
+    var row = document.getElementById("attachRow");
+    if(!row || !s) return;
+    row.innerHTML = "";
+    if(s.attachment){
+      var chip = document.createElement("div");
+      chip.className = "attach-chip";
+      var link = document.createElement("a");
+      link.href = s.attachment.dataUrl;
+      link.download = s.attachment.name;
+      link.textContent = s.attachment.name;
+      var rm = document.createElement("span");
+      rm.className = "attach-remove";
+      rm.textContent = "Xóa";
+      rm.addEventListener("click", function(){ s.attachment = null; schedulePersist(true); renderAttachment(); });
+      chip.appendChild(link);
+      chip.appendChild(rm);
+      row.appendChild(chip);
+    } else {
+      var hint = document.createElement("span");
+      hint.className = "field-hint";
+      hint.textContent = "Chưa có tệp đính kèm.";
+      row.appendChild(hint);
+    }
+  }
+
+  function handleAttachment(file){
+    var s = getCurrentScale();
+    if(!s) return;
+    if(file.size > 4 * 1024 * 1024){
+      showConfirmModal("Tệp quá lớn", "Tệp quá lớn (>4MB) để lưu trong ứng dụng. Vui lòng chọn tệp nhỏ hơn, hoặc dán nội dung trực tiếp vào ô \"Nội dung bảng điểm\".", function(){}, true);
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      s.attachment = {name:file.name, dataUrl:e.target.result, size:file.size};
+      schedulePersist(true);
+      renderAttachment();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /* ---------------- confirm modal ---------------- */
+  function showConfirmModal(title, message, onConfirm, okOnly){
+    var overlay = document.getElementById("miniModalOverlay");
+    var modal = document.getElementById("miniModal");
+    modal.className = "mini-modal center-text";
+    modal.innerHTML =
+      '<h3>' + escapeHtml(title) + '</h3>' +
+      '<p>' + escapeHtml(message) + '</p>' +
+      '<div class="mini-modal-actions">' +
+        (okOnly ? '' : '<button class="btn btn-cancel" id="miniCancelBtn">Hủy</button>') +
+        '<button class="btn ' + (okOnly ? 'btn-gold' : 'btn-danger') + '" id="miniConfirmBtn">' + (okOnly ? 'Đã hiểu' : 'Đồng ý') + '</button>' +
+      '</div>';
+    overlay.classList.remove("hidden");
+    if(!okOnly){
+      document.getElementById("miniCancelBtn").addEventListener("click", function(){ overlay.classList.add("hidden"); });
+    }
+    document.getElementById("miniConfirmBtn").addEventListener("click", function(){
+      overlay.classList.add("hidden");
+      onConfirm();
+    });
+  }
+
+  /* ---------------- sync settings modal ---------------- */
+  function showSyncSettingsModal(){
+    var overlay = document.getElementById("miniModalOverlay");
+    var modal = document.getElementById("miniModal");
+    modal.className = "mini-modal";
+    var cfg = loadSyncConfig();
+    var currentCode = cfg ? cfg.syncCode : randomCode();
+
+    modal.innerHTML =
+      '<h3>Đồng bộ giữa các thiết bị</h3>' +
+      '<p>Dùng một Firestore (Firebase, miễn phí) làm nơi trung chuyển dữ liệu. Cài một lần trên mỗi thiết bị bằng cùng cấu hình và cùng "mã đồng bộ" bên dưới, dữ liệu sẽ tự khớp giữa iPhone và Windows.</p>' +
+
+      '<label class="field-label">1. Dán cấu hình Firebase (firebaseConfig)</label>' +
+      '<textarea class="field-textarea" id="fbConfigInput" rows="5" placeholder=\'Dán nguyên đoạn: { "apiKey": "...", "projectId": "...", ... }\'></textarea>' +
+      '<div class="field-hint">Lấy tại console.firebase.google.com → Tạo dự án miễn phí → Build → Firestore Database → Tạo CSDL → Cài đặt dự án → Thêm ứng dụng Web → sao chép đoạn cấu hình.</div>' +
+
+      '<label class="field-label">2. Mã đồng bộ (dùng giống nhau trên mọi thiết bị)</label>' +
+      '<div style="display:flex; gap:8px;"><input type="text" class="field-input" id="syncCodeInput" value="' + escapeHtml(currentCode) + '"><button class="icon-btn" id="genCodeBtn" type="button">Tạo mã mới</button></div>' +
+      '<div class="field-hint">Giữ kín mã này — ai có mã và cấu hình đều xem/sửa được dữ liệu. Đừng lưu thông tin định danh bệnh nhân trong app này.</div>' +
+
+      '<div class="mini-modal-actions">' +
+        '<button class="btn btn-cancel" id="syncCancelBtn">Đóng</button>' +
+        (cfg ? '<button class="btn btn-danger" id="syncDisconnectBtn">Ngắt đồng bộ</button>' : '') +
+        '<button class="btn btn-gold" id="syncConnectBtn">Lưu &amp; Kết nối</button>' +
+      '</div>' +
+      '<div class="sync-status-line" id="syncModalStatus"></div>';
+
+    if(cfg){ document.getElementById("fbConfigInput").value = JSON.stringify(cfg.config, null, 2); }
+
+    overlay.classList.remove("hidden");
+    document.getElementById("syncCancelBtn").addEventListener("click", function(){ overlay.classList.add("hidden"); });
+    document.getElementById("genCodeBtn").addEventListener("click", function(){ document.getElementById("syncCodeInput").value = randomCode(); });
+    if(cfg){
+      document.getElementById("syncDisconnectBtn").addEventListener("click", function(){
+        disconnectSync();
+        overlay.classList.add("hidden");
+      });
+    }
+    document.getElementById("syncConnectBtn").addEventListener("click", function(){
+      var text = document.getElementById("fbConfigInput").value.trim();
+      var code = document.getElementById("syncCodeInput").value.trim();
+      var statusEl = document.getElementById("syncModalStatus");
+      var parsedConfig = parseFirebaseConfigText(text);
+      if(!parsedConfig || !parsedConfig.apiKey || !parsedConfig.projectId){
+        statusEl.textContent = "Cấu hình chưa hợp lệ — kiểm tra lại đoạn dán từ Firebase.";
+        return;
+      }
+      if(!code){
+        statusEl.textContent = "Vui lòng nhập mã đồng bộ.";
+        return;
+      }
+      statusEl.textContent = "Đang kết nối…";
+      var newCfg = {config: parsedConfig, syncCode: code};
+      initFirebaseSync(newCfg).then(function(){
+        saveSyncConfig(newCfg);
+        statusEl.textContent = "Kết nối thành công.";
+        setTimeout(function(){ overlay.classList.add("hidden"); }, 700);
+      }).catch(function(){
+        statusEl.textContent = "Không kết nối được — kiểm tra cấu hình, mạng, và quy tắc bảo mật Firestore.";
+      });
+    });
+  }
+
+  /* ---------------- export / import (manual backup fallback) ---------------- */
+  function exportData(){
+    var blob = new Blob([JSON.stringify(DATA, null, 2)], {type:"application/json"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "kho-thang-diem-phcn-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function importData(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var parsed = JSON.parse(e.target.result);
+        if(!parsed.categories || !parsed.scales) throw new Error("invalid");
+        showConfirmModal("Nhập dữ liệu", "Nhập dữ liệu sẽ THAY THẾ toàn bộ dữ liệu hiện tại trên máy này. Tiếp tục?", function(){
+          parsed.scales = parsed.scales.map(migrateScale);
+          DATA = parsed;
+          activeCategoryId = DATA.categories.length ? DATA.categories[0].id : null;
+          schedulePersist();
+          renderTabs();
+          renderGrid();
+        });
+      }catch(err){
+        showConfirmModal("Lỗi", "Tệp không hợp lệ, không thể nhập dữ liệu.", function(){}, true);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------------- init ---------------- */
+  function bindGlobalEvents(){
+    document.getElementById("searchInput").addEventListener("input", renderGrid);
+    document.getElementById("addScaleBtn").addEventListener("click", addScale);
+    document.getElementById("exportBtn").addEventListener("click", exportData);
+    document.getElementById("syncSettingsBtn").addEventListener("click", showSyncSettingsModal);
+    document.getElementById("importBtn").addEventListener("click", function(){ document.getElementById("importFile").click(); });
+    document.getElementById("importFile").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(file) importData(file);
+      e.target.value = "";
+    });
+    document.getElementById("detailOverlay").addEventListener("click", function(e){ if(e.target === this) closeDetail(); });
+    document.getElementById("lightbox").addEventListener("click", function(){ this.classList.add("hidden"); });
+  }
+
+  function init(){
+    DATA = loadLocalData();
+    if(!DATA || !DATA.categories || !DATA.categories.length){ DATA = seedData(); saveLocalData(); }
+    DATA.scales = (DATA.scales||[]).map(migrateScale);
+    activeCategoryId = DATA.categories[0].id;
+
+    bindGlobalEvents();
+    renderTabs();
+    renderGrid();
+
+    var cfg = loadSyncConfig();
+    if(cfg){
+      initFirebaseSync(cfg, true).catch(function(){ /* stays local-only, badge already updated */ });
+    }
+
+    if("serviceWorker" in navigator){
+      window.addEventListener("load", function(){
+        navigator.serviceWorker.register("sw.js").catch(function(){});
+      });
+    }
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>
