@@ -94,7 +94,7 @@
     border-radius:7px 7px 0 0; color:var(--text-muted); font-size:14px; white-space:nowrap; cursor:pointer; flex-shrink:0;
   }
   .tab.active{ background:var(--bg-main); color:var(--gold); font-weight:bold; box-shadow:inset 0 2px 0 var(--gold-soft); }
-  .tab[contenteditable="true"]{ outline:1px dashed var(--gold-soft); color:var(--text-light); }
+  .tab.editing{ outline:1px dashed var(--gold-soft); color:var(--text-light); }
   .tab-close{ font-size:12px; color:var(--text-muted); opacity:.55; padding:0 2px; }
   .tab-close:hover{ opacity:1; color:var(--red); }
   .tab-add{ display:flex; align-items:center; justify-content:center; padding:8px 14px; color:var(--gold-soft); font-size:16px; cursor:pointer; flex-shrink:0; }
@@ -530,7 +530,7 @@
       tab.appendChild(close);
 
       tab.addEventListener("click", function(){
-        if(tab.getAttribute("contenteditable") === "true") return;
+        if(tab.classList.contains("editing")) return;
         if(cat.id === activeCategoryId) return;
         activeCategoryId = cat.id;
         document.getElementById("searchInput").value = "";
@@ -540,12 +540,12 @@
 
       tab.addEventListener("dblclick", function(){
         label.setAttribute("contenteditable","true");
-        tab.setAttribute("contenteditable","true");
+        tab.classList.add("editing");
         label.focus();
         selectAllText(label);
         function finish(){
           label.removeAttribute("contenteditable");
-          tab.removeAttribute("contenteditable");
+          tab.classList.remove("editing");
           cat.name = label.textContent.trim() || "Mục không tên";
           schedulePersist();
           renderTabs();
