@@ -129,6 +129,36 @@
   }
   .node-add:hover{ color:var(--gold); border-color:var(--gold); }
 
+  .node.calc{
+    border-color: var(--green);
+    background: linear-gradient(160deg, #3f7a5c, #295c43);
+  }
+  .node.calc.empty{
+    border:2px dashed var(--green);
+    background: linear-gradient(160deg, #364a41, #23352c);
+    box-shadow:none;
+  }
+  .node.calc .node-title{ font-size:12px; }
+  .node-menu-dot{
+    position:absolute; top:4px; right:4px;
+    width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%;
+    background:rgba(0,0,0,.35);
+    color:var(--text-light);
+    font-size:15px;
+    line-height:1;
+    cursor:pointer;
+  }
+  .node-menu-dot:hover{ background:rgba(0,0,0,.6); }
+  .node-cat-tag{
+    font-size:10px;
+    color:var(--text-muted);
+    background:rgba(0,0,0,.3);
+    padding:1px 7px;
+    border-radius:8px;
+  }
+
   .tooltip{
     position:fixed; max-width:240px; background:#0d1a24; border:1px solid var(--node-border); color:var(--text-light);
     font-size:12.5px; line-height:1.4; padding:8px 10px; border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.5);
@@ -158,13 +188,6 @@
   .field-hint{ font-size:11.5px; color:var(--text-muted); margin-top:4px; font-style:italic; }
 
   /* score builder */
-  .mode-switch{ display:flex; gap:8px; margin-top:8px; }
-  .mode-switch button{
-    flex:1; font-family:var(--serif); font-size:13px; padding:7px 8px; border-radius:5px; border:1px solid var(--wood-border);
-    background:rgba(0,0,0,.25); color:var(--text-muted); cursor:pointer;
-  }
-  .mode-switch button.active{ background:linear-gradient(180deg, var(--gold), var(--gold-soft)); color:#2a1d0f; font-weight:bold; }
-
   .score-items{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
   .score-item{
     border:1px solid var(--wood-border); border-radius:6px; padding:10px; background:rgba(0,0,0,.18);
@@ -264,7 +287,7 @@
       </div>
     </div>
     <div class="toolbar">
-      <input type="text" id="searchInput" placeholder="Tìm thang điểm trong mục này…">
+      <input type="text" id="searchInput" placeholder="Tìm thang điểm (trong tất cả các mục)…">
       <button class="btn btn-gold" id="addScaleBtn">+ Thêm thang điểm</button>
     </div>
   </header>
@@ -298,6 +321,7 @@
   var DATA = null;
   var activeCategoryId = null;
   var currentScaleId = null;
+  var currentView = "info";
   var persistTimer = null;
   var longPressTimer = null;
   var suppressClick = false;
@@ -361,6 +385,7 @@
     if(s.scoreItems === undefined) s.scoreItems = [];
     if(s.interpretations === undefined) s.interpretations = [];
     if(s.tableContent === undefined) s.tableContent = "";
+    if(s.hasCalculator === undefined) s.hasCalculator = !!(s.scoreItems && s.scoreItems.length);
     return s;
   }
 
@@ -615,51 +640,101 @@
 
   /* ---------------- grid ---------------- */
   var CLIPBOARD_ICON = '<svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M9 12l2 2 4-4"/></svg>';
+  var CALC_ICON = '<svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="7" y1="7" x2="17" y2="7"/><circle cx="8" cy="13" r="1"/><circle cx="12" cy="13" r="1"/><circle cx="16" cy="13" r="1"/><circle cx="8" cy="17" r="1"/><circle cx="12" cy="17" r="1"/><circle cx="16" cy="17" r="1"/></svg>';
+
+  function getCategoryName(id){
+    var c = DATA.categories.find(function(x){ return x.id === id; });
+    return c ? c.name : "";
+  }
 
   function renderGrid(){
     var area = document.getElementById("gridArea");
     area.innerHTML = "";
-    if(!activeCategoryId){
-      area.innerHTML = '<p class="empty-hint">Chưa có mục nào. Bấm dấu "+" trên thanh tab để tạo mục đầu tiên.</p>';
-      return;
-    }
     var query = normSearch(document.getElementById("searchInput").value);
-    var scales = DATA.scales.filter(function(s){
-      return s.categoryId === activeCategoryId && (!query || normSearch(s.title).indexOf(query) !== -1);
-    });
+    var globalSearch = !!query;
+
+    var scales;
+    if(globalSearch){
+      scales = DATA.scales.filter(function(s){ return normSearch(s.title).indexOf(query) !== -1; });
+    } else {
+      if(!activeCategoryId){
+        area.innerHTML = '<p class="empty-hint">Chưa có mục nào. Bấm dấu "+" trên thanh tab để tạo mục đầu tiên.</p>';
+        return;
+      }
+      scales = DATA.scales.filter(function(s){ return s.categoryId === activeCategoryId; });
+    }
 
     var grid = document.createElement("div");
     grid.className = "node-grid";
 
     scales.forEach(function(s){
-      var filled = !!((s.detail && s.detail.trim()) || (s.tableContent && s.tableContent.trim()) || (s.scoreItems && s.scoreItems.length) || (s.images && s.images.length));
-      var node = document.createElement("div");
-      node.className = "node" + (filled ? "" : " empty");
-      node.innerHTML = CLIPBOARD_ICON + '<div class="node-title"></div>' + (filled ? '<div class="node-check">✓</div>' : "");
-      node.querySelector(".node-title").textContent = s.title || "(Chưa đặt tên)";
-      attachNodeInteractions(node, s);
-      grid.appendChild(node);
+      grid.appendChild(buildInfoNode(s, globalSearch));
+      if(s.hasCalculator){ grid.appendChild(buildCalcNode(s, globalSearch)); }
     });
 
-    var addNode = document.createElement("div");
-    addNode.className = "node-add";
-    addNode.textContent = "+";
-    addNode.title = "Thêm thang điểm mới";
-    addNode.addEventListener("click", addScale);
-    grid.appendChild(addNode);
+    if(!globalSearch){
+      var addNode = document.createElement("div");
+      addNode.className = "node-add";
+      addNode.textContent = "+";
+      addNode.title = "Thêm thang điểm mới";
+      addNode.addEventListener("click", addScale);
+      grid.appendChild(addNode);
+    }
 
     area.appendChild(grid);
+
+    if(globalSearch && !scales.length){
+      var hint = document.createElement("p");
+      hint.className = "empty-hint";
+      hint.textContent = "Không tìm thấy thang điểm nào khớp từ khóa.";
+      area.appendChild(hint);
+    }
   }
 
-  function attachNodeInteractions(node, scale){
-    node.addEventListener("mouseenter", function(e){ showTooltip(scale.shortDesc || "Chưa có ghi chú.", e.clientX, e.clientY); });
+  function buildInfoNode(s, globalSearch){
+    var filled = !!((s.detail && s.detail.trim()) || (s.tableContent && s.tableContent.trim()) || (s.images && s.images.length));
+    var node = document.createElement("div");
+    node.className = "node" + (filled ? "" : " empty");
+    node.innerHTML = CLIPBOARD_ICON + '<div class="node-title"></div>' +
+      (globalSearch ? '<div class="node-cat-tag"></div>' : "") +
+      (filled ? '<div class="node-check">✓</div>' : "");
+    node.querySelector(".node-title").textContent = s.title || "(Chưa đặt tên)";
+    if(globalSearch){ node.querySelector(".node-cat-tag").textContent = getCategoryName(s.categoryId); }
+    attachNodeInteractions(node, s.shortDesc, function(){ openDetail(s.id); });
+    return node;
+  }
+
+  function buildCalcNode(s, globalSearch){
+    var configured = s.scoreItems && s.scoreItems.length;
+    var node = document.createElement("div");
+    node.className = "node calc" + (configured ? "" : " empty");
+    node.innerHTML = CALC_ICON + '<div class="node-title"></div>' +
+      (globalSearch ? '<div class="node-cat-tag"></div>' : "") +
+      '<div class="node-menu-dot" title="Chỉnh sửa bảng chấm điểm">⋯</div>';
+    node.querySelector(".node-title").textContent = "Chấm điểm: " + (s.title || "");
+    if(globalSearch){ node.querySelector(".node-cat-tag").textContent = getCategoryName(s.categoryId); }
+
+    node.querySelector(".node-menu-dot").addEventListener("click", function(e){
+      e.stopPropagation();
+      openCalcBuilder(s.id);
+    });
+
+    var tip = configured ? "Bấm để mở và điền bảng chấm điểm. Bấm dấu ⋯ để sửa cấu trúc." : "Chưa có mục nào — bấm để bắt đầu thêm mục chấm điểm.";
+    attachNodeInteractions(node, tip, function(){
+      if(configured){ openCalcUse(s.id); } else { openCalcBuilder(s.id); }
+    });
+    return node;
+  }
+
+  function attachNodeInteractions(node, tooltipText, onOpen){
+    node.addEventListener("mouseenter", function(e){ showTooltip(tooltipText || "Chưa có ghi chú.", e.clientX, e.clientY); });
     node.addEventListener("mousemove", function(e){ moveTooltip(e.clientX, e.clientY); });
     node.addEventListener("mouseleave", hideTooltip);
 
     node.addEventListener("touchstart", function(e){
       var touch = e.touches[0];
       longPressTimer = setTimeout(function(){
-        showTooltip(scale.shortDesc || "Chưa có ghi chú.", touch.clientX, touch.clientY);
+        showTooltip(tooltipText || "Chưa có ghi chú.", touch.clientX, touch.clientY);
         suppressClick = true;
       }, 480);
     }, {passive:true});
@@ -668,7 +743,7 @@
 
     node.addEventListener("click", function(){
       if(suppressClick){ suppressClick = false; return; }
-      openDetail(scale.id);
+      onOpen();
     });
   }
 
@@ -687,7 +762,7 @@
 
   /* ---------------- add / delete scale ---------------- */
   function addScale(){
-    var s = {id:uid(), categoryId:activeCategoryId, title:"Thang điểm mới", shortDesc:"", detail:"", tableContent:"", mode:"text", scoreItems:[], interpretations:[], images:[], attachment:null};
+    var s = {id:uid(), categoryId:activeCategoryId, title:"Thang điểm mới", shortDesc:"", detail:"", tableContent:"", mode:"text", hasCalculator:false, scoreItems:[], interpretations:[], images:[], attachment:null};
     DATA.scales.push(s);
     schedulePersist();
     renderGrid();
@@ -710,10 +785,14 @@
   }
 
   /* ---------------- detail overlay ---------------- */
+  function showDetailOverlay(){
+    document.getElementById("detailOverlay").classList.remove("hidden");
+  }
   function openDetail(id, focusTitle){
     currentScaleId = id;
+    currentView = "info";
     renderDetailPanel();
-    document.getElementById("detailOverlay").classList.remove("hidden");
+    showDetailOverlay();
     if(focusTitle){
       setTimeout(function(){
         var el = document.getElementById("titleInput");
@@ -721,9 +800,22 @@
       }, 30);
     }
   }
+  function openCalcUse(id){
+    currentScaleId = id;
+    currentView = "calcUse";
+    renderDetailPanel();
+    showDetailOverlay();
+  }
+  function openCalcBuilder(id){
+    currentScaleId = id;
+    currentView = "calcBuilder";
+    renderDetailPanel();
+    showDetailOverlay();
+  }
   function closeDetail(skipPending){
     document.getElementById("detailOverlay").classList.add("hidden");
     currentScaleId = null;
+    currentView = "info";
     if(!skipPending && pendingRemotePayload){
       var p = pendingRemotePayload; pendingRemotePayload = null;
       applyRemoteData(p);
@@ -746,11 +838,23 @@
     var s = getCurrentScale();
     var panel = document.getElementById("detailPanel");
     if(!s){ panel.innerHTML = ""; return; }
+    if(currentView === "calcUse"){ renderCalcUsePanel(s, panel); }
+    else if(currentView === "calcBuilder"){ renderCalcBuilderPanel(s, panel); }
+    else { renderInfoPanel(s, panel); }
+  }
+
+  function renderInfoPanel(s, panel){
+    var categoryOptions = DATA.categories.map(function(c){
+      return '<option value="' + c.id + '"' + (c.id === s.categoryId ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+    }).join('');
 
     panel.innerHTML =
       '<button class="btn-close" id="closeDetailBtn">✕</button>' +
       '<label class="field-label">Tên thang điểm</label>' +
       '<input type="text" class="field-input title-input" id="titleInput">' +
+
+      '<label class="field-label">Thuộc mục</label>' +
+      '<select class="field-input" id="categorySelect">' + categoryOptions + '</select>' +
 
       '<label class="field-label">Ý nghĩa (ghi chú ngắn hiện khi rê chuột / giữ vào ô)</label>' +
       '<textarea class="field-textarea" id="shortDescInput" rows="2"></textarea>' +
@@ -758,12 +862,12 @@
       '<label class="field-label">Ý nghĩa cụ thể / hướng dẫn sử dụng</label>' +
       '<textarea class="field-textarea" id="detailInput" rows="4"></textarea>' +
 
-      '<label class="field-label">Nội dung bảng điểm chi tiết</label>' +
-      '<div class="mode-switch">' +
-        '<button id="modeTextBtn" type="button">Văn bản tự do</button>' +
-        '<button id="modeCalcBtn" type="button">Bảng tính điểm tương tác</button>' +
-      '</div>' +
-      '<div id="modeArea"></div>' +
+      '<label class="field-label">Nội dung bảng điểm chi tiết (văn bản)</label>' +
+      '<textarea class="field-textarea" id="tableInput" rows="6" placeholder="Dán hoặc gõ nội dung bảng điểm tại đây (từng mục, từng dòng điểm số…)."></textarea>' +
+      '<div class="field-hint">Mẹo: mở file Word gốc, chọn toàn bộ bảng, dán trực tiếp vào đây.</div>' +
+
+      '<label class="field-label">Bảng chấm điểm tương tác</label>' +
+      '<div id="calcStatusArea"></div>' +
 
       '<label class="field-label">Hình ảnh minh họa</label>' +
       '<div class="gallery" id="gallery"></div>' +
@@ -781,18 +885,20 @@
     document.getElementById("titleInput").value = s.title || "";
     document.getElementById("shortDescInput").value = s.shortDesc || "";
     document.getElementById("detailInput").value = s.detail || "";
+    document.getElementById("tableInput").value = s.tableContent || "";
 
     document.getElementById("titleInput").addEventListener("input", function(){ updateField("title", this.value); });
+    document.getElementById("categorySelect").addEventListener("change", function(){
+      s.categoryId = this.value;
+      schedulePersist(true);
+    });
     document.getElementById("shortDescInput").addEventListener("input", function(){ updateField("shortDesc", this.value); });
     document.getElementById("detailInput").addEventListener("input", function(){ updateField("detail", this.value); });
+    document.getElementById("tableInput").addEventListener("input", function(){ updateField("tableContent", this.value); });
     document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
     document.getElementById("deleteScaleBtn").addEventListener("click", function(){ confirmDeleteScale(s.id); });
 
-    document.getElementById("modeTextBtn").addEventListener("click", function(){ s.mode = "text"; schedulePersist(); renderModeArea(); updateModeButtons(); });
-    document.getElementById("modeCalcBtn").addEventListener("click", function(){ s.mode = "calc"; schedulePersist(); renderModeArea(); updateModeButtons(); });
-    updateModeButtons();
-    renderModeArea();
-
+    renderCalcStatusArea(s);
     renderGallery();
     renderAttachment();
 
@@ -804,39 +910,60 @@
     });
   }
 
-  function updateModeButtons(){
-    var s = getCurrentScale();
-    document.getElementById("modeTextBtn").className = s.mode === "text" ? "active" : "";
-    document.getElementById("modeCalcBtn").className = s.mode === "calc" ? "active" : "";
-  }
-
-  /* ---------- text mode ---------- */
-  function renderModeArea(){
-    var s = getCurrentScale();
-    var area = document.getElementById("modeArea");
-    if(s.mode === "calc"){
-      renderCalcBuilder(area);
-    } else {
+  function renderCalcStatusArea(s){
+    var area = document.getElementById("calcStatusArea");
+    if(!area) return;
+    if(s.hasCalculator){
       area.innerHTML =
-        '<textarea class="field-textarea" id="tableInput" rows="8" placeholder="Dán hoặc gõ nội dung bảng điểm tại đây (từng mục, từng dòng điểm số…)."></textarea>' +
-        '<div class="field-hint">Mẹo: mở file Word gốc, chọn toàn bộ bảng, dán trực tiếp vào đây. Nếu thang điểm có các mục chọn-và-cộng điểm, hãy thử chuyển sang "Bảng tính điểm tương tác" để tự động cộng điểm khi dùng.</div>';
-      document.getElementById("tableInput").value = s.tableContent || "";
-      document.getElementById("tableInput").addEventListener("input", function(){ updateField("tableContent", this.value); });
+        '<div class="field-hint" style="margin-bottom:8px;">✓ Đã có — hiện thành một ô riêng (màu xanh lá) trong danh sách thang điểm.</div>' +
+        '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">' +
+          '<button class="icon-btn" id="openCalcUseBtn" type="button">Mở bảng chấm điểm</button>' +
+          '<button class="icon-btn" id="openCalcBuilderBtn" type="button">Chỉnh sửa cấu trúc</button>' +
+          '<span class="danger-link" id="removeCalcBtn">Xóa bảng chấm điểm</span>' +
+        '</div>';
+      document.getElementById("openCalcUseBtn").addEventListener("click", function(){ openCalcUse(s.id); });
+      document.getElementById("openCalcBuilderBtn").addEventListener("click", function(){ openCalcBuilder(s.id); });
+      document.getElementById("removeCalcBtn").addEventListener("click", function(){
+        showConfirmModal("Xóa bảng chấm điểm", "Xóa bảng chấm điểm tương tác của thang này? Các mục và cách tính đã tạo sẽ mất.", function(){
+          s.hasCalculator = false;
+          s.scoreItems = [];
+          s.interpretations = [];
+          schedulePersist();
+          renderCalcStatusArea(s);
+        });
+      });
+    } else {
+      area.innerHTML = '<button class="btn btn-gold" id="createCalcBtn" type="button" style="padding:8px 14px; font-size:13px;">+ Tạo bảng chấm điểm cho thang này</button>';
+      document.getElementById("createCalcBtn").addEventListener("click", function(){
+        s.hasCalculator = true;
+        if(!s.scoreItems) s.scoreItems = [];
+        if(!s.interpretations) s.interpretations = [];
+        schedulePersist();
+        openCalcBuilder(s.id);
+      });
     }
   }
 
-  /* ---------- interactive score builder ---------- */
-  function renderCalcBuilder(area){
-    var s = getCurrentScale();
-    area.innerHTML =
-      '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục đánh giá. Mỗi mục có thể là "chọn 1 đáp án" (mỗi đáp án gắn số điểm), "chọn nhiều đáp án – cộng dồn" (mỗi đáp án được tick sẽ cộng điểm riêng, dùng cho các mục kiểu CAT/checklist triệu chứng), hoặc "nhập số" (ví dụ thang đau 0–10). App sẽ tự cộng điểm và hiện kết quả bên dưới.</div>' +
+  /* ---------- interactive score builder (own view) ---------- */
+  function renderCalcBuilderPanel(s, panel){
+    panel.innerHTML =
+      '<button class="btn-close" id="closeDetailBtn">✕</button>' +
+      '<label class="field-label" style="font-size:19px; color:var(--gold); margin-top:2px;">' + escapeHtml(s.title || "") + ' — Chỉnh sửa bảng chấm điểm</label>' +
+      '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục đánh giá. Mỗi mục có thể là "chọn 1 đáp án" (mỗi đáp án gắn số điểm), "chọn nhiều đáp án – cộng dồn" (mỗi đáp án được tick sẽ cộng điểm riêng, dùng cho các mục kiểu CAT/checklist triệu chứng), hoặc "nhập số" (ví dụ thang đau 0–10).</div>' +
       '<div class="score-items" id="scoreItemsWrap"></div>' +
       '<span class="add-link" id="addScoreItem">+ Thêm mục đánh giá</span>' +
       '<label class="field-label">Diễn giải theo tổng điểm (tuỳ chọn)</label>' +
       '<div class="interp-rows" id="interpRows"></div>' +
       '<span class="add-link" id="addInterp">+ Thêm mức diễn giải</span>' +
-      '<label class="field-label">Xem thử bảng tính điểm</label>' +
-      '<div class="calc-box" id="calcPreview"></div>';
+      '<label class="field-label">Xem thử</label>' +
+      '<div class="calc-box" id="calcPreview"></div>' +
+      '<div class="detail-footer">' +
+        '<span class="save-status" id="saveStatus"></span>' +
+        '<button class="btn btn-gold" id="backToUseBtn" type="button" style="padding:8px 14px; font-size:13px;">Xong, dùng thử →</button>' +
+      '</div>';
+
+    document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
+    document.getElementById("backToUseBtn").addEventListener("click", function(){ openCalcUse(s.id); });
 
     renderScoreItems();
     renderInterpRows();
@@ -853,6 +980,21 @@
       schedulePersist();
       renderInterpRows();
     });
+  }
+
+  /* ---------- interactive score calculator (use-only view) ---------- */
+  function renderCalcUsePanel(s, panel){
+    panel.innerHTML =
+      '<button class="btn-close" id="closeDetailBtn">✕</button>' +
+      '<label class="field-label" style="font-size:19px; color:var(--gold); margin-top:2px;">' + escapeHtml(s.title || "") + ' — Bảng chấm điểm</label>' +
+      '<div class="calc-box" id="calcPreviewUse"></div>' +
+      '<div class="detail-footer">' +
+        '<span class="add-link" id="editCalcFromUseBtn">Chỉnh sửa cấu trúc bảng này</span>' +
+        '<span></span>' +
+      '</div>';
+    document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
+    document.getElementById("editCalcFromUseBtn").addEventListener("click", function(){ openCalcBuilder(s.id); });
+    renderCalcPreviewInto(document.getElementById("calcPreviewUse"), s);
   }
 
   function renderScoreItems(){
@@ -982,16 +1124,19 @@
   }
 
   function renderCalcPreview(){
-    var s = getCurrentScale();
-    var box = document.getElementById("calcPreview");
-    if(!box) return;
+    renderCalcPreviewInto(document.getElementById("calcPreview"), getCurrentScale());
+  }
+
+  function renderCalcPreviewInto(box, s){
+    if(!box || !s) return;
     box.innerHTML = "";
-    if(!s.scoreItems.length){
+    if(!s.scoreItems || !s.scoreItems.length){
       box.innerHTML = '<div class="field-hint">Chưa có mục đánh giá nào — thêm mục ở trên để xem bảng tính điểm.</div>';
       return;
     }
     var currentValues = {};
     s.scoreItems.forEach(function(item){ currentValues[item.id] = item.type === "multi" ? 0 : null; });
+    var totalValueEl, interpEl;
 
     s.scoreItems.forEach(function(item){
       var itemDiv = document.createElement("div");
@@ -1063,19 +1208,24 @@
 
     var totalRow = document.createElement("div");
     totalRow.className = "calc-total-row";
-    totalRow.innerHTML = '<span>Tổng điểm</span><span class="calc-total-value" id="calcTotalValue">–</span>';
+    var totalLabel = document.createElement("span");
+    totalLabel.textContent = "Tổng điểm";
+    totalValueEl = document.createElement("span");
+    totalValueEl.className = "calc-total-value";
+    totalValueEl.textContent = "–";
+    totalRow.appendChild(totalLabel);
+    totalRow.appendChild(totalValueEl);
     box.appendChild(totalRow);
-    var interpDiv = document.createElement("div");
-    interpDiv.className = "calc-interp";
-    interpDiv.id = "calcInterpValue";
-    box.appendChild(interpDiv);
+
+    interpEl = document.createElement("div");
+    interpEl.className = "calc-interp";
+    box.appendChild(interpEl);
 
     function updateTotal(){
       var anyNull = s.scoreItems.some(function(item){ return currentValues[item.id] === null; });
       var total = 0;
       s.scoreItems.forEach(function(item){ total += currentValues[item.id] || 0; });
-      document.getElementById("calcTotalValue").textContent = anyNull ? total + " (chưa đủ mục)" : total;
-      var interpEl = document.getElementById("calcInterpValue");
+      totalValueEl.textContent = anyNull ? total + " (chưa đủ mục)" : total;
       var match = (s.interpretations||[]).find(function(r){ return total >= r.min && total <= r.max; });
       interpEl.textContent = match && match.label ? match.label : "";
     }
