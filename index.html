@@ -438,6 +438,10 @@
     if(window.firebase && window.firebase.firestore) return Promise.resolve();
     return loadScript(FIREBASE_APP_JS).then(function(){ return loadScript(FIREBASE_FS_JS); });
   }
+  function loadMammothSDK(){
+    if(window.mammoth) return Promise.resolve();
+    return loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.12.2/mammoth.browser.min.js");
+  }
 
   function parseFirebaseConfigText(text){
     try{ return JSON.parse(text); }catch(e){}
@@ -817,6 +821,130 @@
   }
 
   /* ---------- edit page: everything about the scale in one place ---------- */
+  function parseChoiceLines(text){
+    // Format per line: Tên mục :: Đáp án 1 = điểm ; Đáp án 2 = điểm ; ...
+    var items = [];
+    (text || "").split("\n").forEach(function(line){
+      line = line.trim();
+      if(!line) return;
+      var parts = line.split("::");
+      if(parts.length < 2) return;
+      var label = parts[0].trim();
+      var optsRaw = parts.slice(1).join("::");
+      var options = optsRaw.split(/[;,]/).map(function(opt){
+        var m = opt.split("=");
+        var optLabel = (m[0] || "").trim();
+        var pts = m.length > 1 ? Number(m[1].trim().replace(/[^\-0-9.]/g, "")) : NaN;
+        if(isNaN(pts)) pts = 0;
+        return { label: optLabel, points: pts };
+      }).filter(function(o){ return o.label; });
+      if(label && options.length){
+        items.push({ id: uid(), label: label, type: "choice", options: options, min: 0, max: 10 });
+      }
+    });
+    return items;
+  }
+
+  function parseMultiLines(text, groupLabel){
+    // Format per line: Tên đáp án = điểm  →  gộp thành 1 mục "chọn nhiều - cộng dồn"
+    var options = [];
+    (text || "").split("\n").forEach(function(line){
+      line = line.trim();
+      if(!line) return;
+      var m = line.split("=");
+      var optLabel = (m[0] || "").trim();
+      var pts = m.length > 1 ? Number(m[1].trim().replace(/[^\-0-9.]/g, "")) : NaN;
+      if(isNaN(pts)) pts = 0;
+      if(optLabel){ options.push({ label: optLabel, points: pts }); }
+    });
+    if(!options.length) return [];
+    return [{ id: uid(), label: groupLabel || "Nhóm mục", type: "multi", options: options, min: 0, max: 10 }];
+  }
+
+  function renderQuickPastePanel(s, panel){
+    panel.innerHTML =
+      '<div class="field-hint" style="margin-bottom:8px;">Dùng khi thang điểm đã có sẵn dạng bảng — dán nhanh vào đây thay vì bấm từng nút "+ Thêm mục". Không qua AI, chạy hoàn toàn trong máy.</div>' +
+      '<div style="display:flex; gap:16px; margin-bottom:8px; font-size:13px; flex-wrap:wrap;">' +
+        '<label><input type="radio" name="pasteMode" value="choice" checked> Mỗi dòng là 1 mục, chọn 1 đáp án</label>' +
+        '<label><input type="radio" name="pasteMode" value="multi"> Mỗi dòng là 1 triệu chứng, cộng dồn</label>' +
+      '</div>' +
+      '<div id="pasteFormatHint" class="field-hint" style="margin-bottom:8px;"></div>' +
+      '<div id="multiGroupNameWrap" style="display:none; margin-bottom:8px;">' +
+        '<input type="text" class="field-input" id="multiGroupNameInput" placeholder="Tên nhóm mục (VD: Triệu chứng)">' +
+      '</div>' +
+      '<textarea class="field-textarea" id="quickPasteText" rows="6" placeholder="Dán nội dung ở đây…"></textarea>' +
+      '<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">' +
+        '<button class="icon-btn" id="importDocxBtn" type="button">📎 Lấy nội dung từ file Word (.docx)</button>' +
+        '<input type="file" id="docxFileInput" accept=".docx" style="display:none">' +
+        '<button class="btn btn-gold" id="parsePasteBtn" type="button" style="padding:8px 14px; font-size:13px;">Phân tích &amp; thêm vào bảng</button>' +
+      '</div>' +
+      '<div class="save-status" id="pasteStatus" style="margin-top:6px;"></div>';
+
+    function updateHint(){
+      var mode = panel.querySelector('input[name="pasteMode"]:checked').value;
+      var hintEl = document.getElementById("pasteFormatHint");
+      var groupWrap = document.getElementById("multiGroupNameWrap");
+      if(mode === "choice"){
+        hintEl.innerHTML = 'Đúng cú pháp: <code>Tên mục :: Đáp án 1 = điểm ; Đáp án 2 = điểm</code><br>Ví dụ: <code>Khó thở :: Không = 0 ; Nhẹ = 1 ; Nặng = 2</code>';
+        groupWrap.style.display = "none";
+      } else {
+        hintEl.innerHTML = 'Đúng cú pháp: <code>Tên đáp án = điểm</code> (mỗi dòng một đáp án)<br>Ví dụ: <code>Ho có đờm = 1</code>';
+        groupWrap.style.display = "block";
+      }
+    }
+    updateHint();
+    Array.prototype.forEach.call(panel.querySelectorAll('input[name="pasteMode"]'), function(r){
+      r.addEventListener("change", updateHint);
+    });
+
+    document.getElementById("importDocxBtn").addEventListener("click", function(){
+      document.getElementById("docxFileInput").click();
+    });
+    document.getElementById("docxFileInput").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(!file) return;
+      var statusEl = document.getElementById("pasteStatus");
+      statusEl.style.color = "var(--text-muted)";
+      statusEl.textContent = "Đang đọc file…";
+      loadMammothSDK().then(function(){
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          window.mammoth.extractRawText({ arrayBuffer: ev.target.result }).then(function(result){
+            document.getElementById("quickPasteText").value = result.value;
+            statusEl.style.color = "var(--green)";
+            statusEl.textContent = "Đã lấy nội dung — kiểm tra/sửa cho đúng cú pháp bên trên rồi bấm Phân tích.";
+          }).catch(function(err){
+            statusEl.style.color = "var(--red)";
+            statusEl.textContent = "Không đọc được nội dung file: " + err.message;
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }).catch(function(){
+        statusEl.style.color = "var(--red)";
+        statusEl.textContent = "Không tải được thư viện đọc file (kiểm tra mạng).";
+      });
+      e.target.value = "";
+    });
+
+    document.getElementById("parsePasteBtn").addEventListener("click", function(){
+      var mode = panel.querySelector('input[name="pasteMode"]:checked').value;
+      var text = document.getElementById("quickPasteText").value;
+      var statusEl = document.getElementById("pasteStatus");
+      var newItems = mode === "choice" ? parseChoiceLines(text) : parseMultiLines(text, document.getElementById("multiGroupNameInput").value.trim());
+      if(!newItems.length){
+        statusEl.style.color = "var(--red)";
+        statusEl.textContent = "Không nhận diện được dòng nào hợp lệ — kiểm tra lại đúng cú pháp ở trên.";
+        return;
+      }
+      s.scoreItems = s.scoreItems.concat(newItems);
+      schedulePersist();
+      renderScoreItems();
+      statusEl.style.color = "var(--green)";
+      statusEl.textContent = "Đã thêm " + newItems.length + " mục vào bảng bên dưới.";
+      document.getElementById("quickPasteText").value = "";
+    });
+  }
+
   function renderEditPanel(s, panel){
     if(!s.scoreItems) s.scoreItems = [];
     if(!s.interpretations) s.interpretations = [];
@@ -844,13 +972,13 @@
 
       '<label class="field-label">Bảng chấm điểm tương tác (tuỳ chọn)</label>' +
       '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục để app tự cộng điểm khi dùng thật — bỏ trống nếu chỉ cần văn bản ở trên. "Chọn 1 đáp án" (mỗi đáp án gắn điểm), "chọn nhiều đáp án – cộng dồn" (kiểu CAT/checklist), hoặc "nhập số" (VD thang đau 0–10).</div>' +
+      '<span class="add-link" id="quickPasteToggleBtn">📋 Dán nhanh từ bảng có sẵn (không qua AI)</span>' +
+      '<div id="quickPastePanel" style="display:none; margin-top:10px; margin-bottom:10px; border:1px solid var(--wood-border); border-radius:7px; padding:12px; background:rgba(0,0,0,.18);"></div>' +
       '<div class="score-items" id="scoreItemsWrap"></div>' +
       '<span class="add-link" id="addScoreItem">+ Thêm mục đánh giá</span>' +
       '<label class="field-label">Diễn giải theo tổng điểm (tuỳ chọn)</label>' +
       '<div class="interp-rows" id="interpRows"></div>' +
       '<span class="add-link" id="addInterp">+ Thêm mức diễn giải</span>' +
-      '<label class="field-label">Xem thử</label>' +
-      '<div class="calc-box" id="calcPreview"></div>' +
 
       '<label class="field-label">Hình ảnh minh họa</label>' +
       '<div class="gallery" id="gallery"></div>' +
@@ -883,18 +1011,22 @@
 
     renderScoreItems();
     renderInterpRows();
-    renderCalcPreview();
 
     document.getElementById("addScoreItem").addEventListener("click", function(){
       s.scoreItems.push({id:uid(), label:"Mục mới", type:"choice", options:[{label:"Không có", points:0},{label:"Có", points:1}], min:0, max:10});
       schedulePersist();
       renderScoreItems();
-      renderCalcPreview();
     });
     document.getElementById("addInterp").addEventListener("click", function(){
       s.interpretations.push({min:0, max:0, label:""});
       schedulePersist();
       renderInterpRows();
+    });
+    document.getElementById("quickPasteToggleBtn").addEventListener("click", function(){
+      var qp = document.getElementById("quickPastePanel");
+      var isHidden = qp.style.display === "none";
+      qp.style.display = isHidden ? "block" : "none";
+      if(isHidden){ renderQuickPastePanel(s, qp); }
     });
 
     renderGallery();
@@ -909,8 +1041,17 @@
   }
 
   /* ---------- use page: fill in the calculator, save a scoring record with patient name ---------- */
-  function renderUsePanel(s, panel){
+  function renderUsePanel(s, panel, preselectPatient){
     if(!s.history) s.history = [];
+
+    var patientNames = [];
+    s.history.forEach(function(r){ if(patientNames.indexOf(r.patientName) === -1) patientNames.push(r.patientName); });
+    patientNames.sort(function(a,b){ return a.localeCompare(b, 'vi'); });
+    var patientOptionsHtml = patientNames.map(function(n){
+      var count = s.history.filter(function(r){ return r.patientName === n; }).length;
+      return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + ' (' + count + ' lần)</option>';
+    }).join('');
+
     panel.innerHTML =
       '<button class="btn-close" id="closeDetailBtn">✕</button>' +
       '<div class="node-menu-dot" id="openEditFromUseBtn" style="position:static; display:inline-flex; float:right; margin-top:2px;" title="Sửa thông tin, nội dung, ảnh…">⋯</div>' +
@@ -927,7 +1068,13 @@
 
       '<label class="field-label">Lịch sử đã chấm (' + s.history.length + ')</label>' +
       '<div id="historyList"></div>' +
-      (s.history.length ? '<span class="add-link" id="exportHistoryBtn">⇩ Xuất lịch sử ra file CSV</span>' : '');
+      (s.history.length ? '<span class="add-link" id="exportHistoryBtn">⇩ Xuất lịch sử ra file CSV</span>' : '') +
+
+      (patientNames.length ?
+        '<label class="field-label">Biểu đồ theo dõi bệnh nhân</label>' +
+        '<select class="field-input" id="patientChartSelect"><option value="">— Chọn bệnh nhân —</option>' + patientOptionsHtml + '</select>' +
+        '<div id="patientChartArea"></div>'
+      : '');
 
     document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
     document.getElementById("openEditFromUseBtn").addEventListener("click", function(){ openEdit(s.id); });
@@ -959,13 +1106,138 @@
         items: snap.items
       });
       schedulePersist();
-      renderUsePanel(s, panel);
+      renderUsePanel(s, panel, name);
     });
 
     renderHistoryList(s);
 
     var exportBtn = document.getElementById("exportHistoryBtn");
     if(exportBtn){ exportBtn.addEventListener("click", function(){ exportScaleHistory(s); }); }
+
+    var chartSelect = document.getElementById("patientChartSelect");
+    if(chartSelect){
+      chartSelect.addEventListener("change", function(){ renderPatientChart(s, this.value); });
+      if(preselectPatient && patientNames.indexOf(preselectPatient) !== -1){
+        chartSelect.value = preselectPatient;
+        renderPatientChart(s, preselectPatient);
+      }
+    }
+  }
+
+  function formatShortDateTime(iso){
+    var d = new Date(iso);
+    var dd = String(d.getDate()).padStart(2,"0");
+    var mm = String(d.getMonth()+1).padStart(2,"0");
+    var hh = String(d.getHours()).padStart(2,"0");
+    var mi = String(d.getMinutes()).padStart(2,"0");
+    return dd + "/" + mm + " " + hh + ":" + mi;
+  }
+
+  function renderPatientChart(s, patientName){
+    var area = document.getElementById("patientChartArea");
+    if(!area) return;
+    if(!patientName){ area.innerHTML = ""; return; }
+
+    var records = (s.history || []).filter(function(r){ return r.patientName === patientName; })
+      .slice()
+      .sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+    if(!records.length){ area.innerHTML = '<div class="field-hint">Không có dữ liệu.</div>'; return; }
+
+    var labels = records.map(function(r){ return formatShortDateTime(r.date); });
+
+    var itemLabelsOrder = [];
+    records.forEach(function(r){
+      (r.items || []).forEach(function(it){
+        if(itemLabelsOrder.indexOf(it.label) === -1) itemLabelsOrder.push(it.label);
+      });
+    });
+
+    var palette = ['#86c2e0','#4caf6d','#b3413a','#7fa8ff','#e0729c','#72e0c9','#c9a55c','#f1e6cf'];
+    var series = itemLabelsOrder.map(function(label, idx){
+      return {
+        name: label,
+        color: palette[idx % palette.length],
+        bold: false,
+        data: records.map(function(r){
+          var found = (r.items || []).find(function(it){ return it.label === label; });
+          return found ? found.points : null;
+        })
+      };
+    });
+    series.push({
+      name: "Tổng điểm",
+      color: "#e0bd72",
+      bold: true,
+      data: records.map(function(r){ return r.total; })
+    });
+
+    var svg = buildProgressChartSVG(series, labels);
+    var legend = series.map(function(sr){
+      return '<span style="display:inline-flex; align-items:center; gap:5px; margin-right:12px; margin-top:4px; font-size:12px; color:var(--text-muted);">' +
+        '<span style="width:10px; height:10px; border-radius:50%; background:' + sr.color + '; display:inline-block;"></span>' +
+        escapeHtml(sr.name) + '</span>';
+    }).join("");
+
+    area.innerHTML =
+      '<div style="background:rgba(0,0,0,.18); border:1px solid var(--wood-border); border-radius:8px; padding:10px;">' +
+        svg +
+        '<div style="margin-top:4px; display:flex; flex-wrap:wrap;">' + legend + '</div>' +
+      '</div>';
+  }
+
+  function buildProgressChartSVG(series, xLabels){
+    var width = 640, height = 260;
+    var padL = 34, padR = 14, padT = 14, padB = 28;
+    var innerW = width - padL - padR;
+    var innerH = height - padT - padB;
+
+    var allVals = [];
+    series.forEach(function(sr){ sr.data.forEach(function(v){ if(v !== null && v !== undefined) allVals.push(v); }); });
+    var maxY = allVals.length ? Math.max.apply(null, allVals) : 10;
+    if(maxY <= 0) maxY = 1;
+    maxY = maxY * 1.15;
+    var minY = 0;
+
+    function xPos(i){
+      if(xLabels.length <= 1) return padL + innerW / 2;
+      return padL + (innerW * i / (xLabels.length - 1));
+    }
+    function yPos(v){
+      return padT + innerH - ((v - minY) / (maxY - minY)) * innerH;
+    }
+
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%; height:auto; display:block;">';
+
+    var gridSteps = 4;
+    for(var g = 0; g <= gridSteps; g++){
+      var gv = minY + (maxY - minY) * g / gridSteps;
+      var gy = yPos(gv);
+      svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (width - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,.12)" stroke-width="1"/>';
+      svg += '<text x="' + (padL - 6) + '" y="' + (gy + 3) + '" font-size="9" fill="#b9ac8f" text-anchor="end">' + Math.round(gv) + '</text>';
+    }
+
+    xLabels.forEach(function(lbl, i){
+      var x = xPos(i);
+      svg += '<text x="' + x + '" y="' + (height - 8) + '" font-size="9" fill="#b9ac8f" text-anchor="middle">' + escapeHtml(lbl) + '</text>';
+    });
+
+    series.forEach(function(sr){
+      var pts = [];
+      sr.data.forEach(function(v, i){
+        if(v === null || v === undefined) return;
+        pts.push(xPos(i) + "," + yPos(v));
+      });
+      if(pts.length){
+        svg += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + sr.color + '" stroke-width="' + (sr.bold ? 3 : 2) + '" opacity="' + (sr.bold ? 1 : 0.85) + '"/>';
+        sr.data.forEach(function(v, i){
+          if(v === null || v === undefined) return;
+          svg += '<circle cx="' + xPos(i) + '" cy="' + yPos(v) + '" r="' + (sr.bold ? 4 : 3) + '" fill="' + sr.color + '"/>';
+        });
+      }
+    });
+
+    svg += '</svg>';
+    return svg;
   }
 
   function renderHistoryList(s){
