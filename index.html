@@ -129,18 +129,8 @@
   }
   .node-add:hover{ color:var(--gold); border-color:var(--gold); }
 
-  .node.calc{
-    border-color: var(--green);
-    background: linear-gradient(160deg, #3f7a5c, #295c43);
-  }
-  .node.calc.empty{
-    border:2px dashed var(--green);
-    background: linear-gradient(160deg, #364a41, #23352c);
-    box-shadow:none;
-  }
-  .node.calc .node-title{ font-size:12px; }
   .node-menu-dot{
-    position:absolute; top:4px; right:4px;
+    position:absolute; top:4px; left:4px;
     width:22px; height:22px;
     display:flex; align-items:center; justify-content:center;
     border-radius:50%;
@@ -158,6 +148,14 @@
     padding:1px 7px;
     border-radius:8px;
   }
+
+  .history-row{
+    position:relative; border:1px solid var(--wood-border); border-radius:6px; padding:8px 28px 8px 10px;
+    background:rgba(0,0,0,.18); margin-bottom:8px; font-size:13px;
+  }
+  .history-main{ color:var(--text-light); }
+  .history-sub{ color:var(--text-muted); margin-top:2px; font-size:12.5px; }
+  .history-row .remove-x{ position:absolute; top:8px; right:10px; }
 
   .tooltip{
     position:fixed; max-width:240px; background:#0d1a24; border:1px solid var(--node-border); color:var(--text-light);
@@ -386,6 +384,7 @@
     if(s.interpretations === undefined) s.interpretations = [];
     if(s.tableContent === undefined) s.tableContent = "";
     if(s.hasCalculator === undefined) s.hasCalculator = !!(s.scoreItems && s.scoreItems.length);
+    if(s.history === undefined) s.history = [];
     return s;
   }
 
@@ -640,7 +639,6 @@
 
   /* ---------------- grid ---------------- */
   var CLIPBOARD_ICON = '<svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M9 12l2 2 4-4"/></svg>';
-  var CALC_ICON = '<svg class="node-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="7" y1="7" x2="17" y2="7"/><circle cx="8" cy="13" r="1"/><circle cx="12" cy="13" r="1"/><circle cx="16" cy="13" r="1"/><circle cx="8" cy="17" r="1"/><circle cx="12" cy="17" r="1"/><circle cx="16" cy="17" r="1"/></svg>';
 
   function getCategoryName(id){
     var c = DATA.categories.find(function(x){ return x.id === id; });
@@ -667,10 +665,7 @@
     var grid = document.createElement("div");
     grid.className = "node-grid";
 
-    scales.forEach(function(s){
-      grid.appendChild(buildInfoNode(s, globalSearch));
-      if(s.hasCalculator){ grid.appendChild(buildCalcNode(s, globalSearch)); }
-    });
+    scales.forEach(function(s){ grid.appendChild(buildScaleNode(s, globalSearch)); });
 
     if(!globalSearch){
       var addNode = document.createElement("div");
@@ -691,38 +686,23 @@
     }
   }
 
-  function buildInfoNode(s, globalSearch){
-    var filled = !!((s.detail && s.detail.trim()) || (s.tableContent && s.tableContent.trim()) || (s.images && s.images.length));
+  function buildScaleNode(s, globalSearch){
+    var filled = !!((s.detail && s.detail.trim()) || (s.tableContent && s.tableContent.trim()) || (s.scoreItems && s.scoreItems.length) || (s.images && s.images.length));
     var node = document.createElement("div");
     node.className = "node" + (filled ? "" : " empty");
     node.innerHTML = CLIPBOARD_ICON + '<div class="node-title"></div>' +
       (globalSearch ? '<div class="node-cat-tag"></div>' : "") +
-      (filled ? '<div class="node-check">✓</div>' : "");
+      (filled ? '<div class="node-check">✓</div>' : "") +
+      '<div class="node-menu-dot" title="Sửa thông tin, nội dung, ảnh…">⋯</div>';
     node.querySelector(".node-title").textContent = s.title || "(Chưa đặt tên)";
-    if(globalSearch){ node.querySelector(".node-cat-tag").textContent = getCategoryName(s.categoryId); }
-    attachNodeInteractions(node, s.shortDesc, function(){ openDetail(s.id); });
-    return node;
-  }
-
-  function buildCalcNode(s, globalSearch){
-    var configured = s.scoreItems && s.scoreItems.length;
-    var node = document.createElement("div");
-    node.className = "node calc" + (configured ? "" : " empty");
-    node.innerHTML = CALC_ICON + '<div class="node-title"></div>' +
-      (globalSearch ? '<div class="node-cat-tag"></div>' : "") +
-      '<div class="node-menu-dot" title="Chỉnh sửa bảng chấm điểm">⋯</div>';
-    node.querySelector(".node-title").textContent = "Chấm điểm: " + (s.title || "");
     if(globalSearch){ node.querySelector(".node-cat-tag").textContent = getCategoryName(s.categoryId); }
 
     node.querySelector(".node-menu-dot").addEventListener("click", function(e){
       e.stopPropagation();
-      openCalcBuilder(s.id);
+      openEdit(s.id);
     });
 
-    var tip = configured ? "Bấm để mở và điền bảng chấm điểm. Bấm dấu ⋯ để sửa cấu trúc." : "Chưa có mục nào — bấm để bắt đầu thêm mục chấm điểm.";
-    attachNodeInteractions(node, tip, function(){
-      if(configured){ openCalcUse(s.id); } else { openCalcBuilder(s.id); }
-    });
+    attachNodeInteractions(node, s.shortDesc, function(){ openUse(s.id); });
     return node;
   }
 
@@ -762,11 +742,11 @@
 
   /* ---------------- add / delete scale ---------------- */
   function addScale(){
-    var s = {id:uid(), categoryId:activeCategoryId, title:"Thang điểm mới", shortDesc:"", detail:"", tableContent:"", mode:"text", hasCalculator:false, scoreItems:[], interpretations:[], images:[], attachment:null};
+    var s = {id:uid(), categoryId:activeCategoryId, title:"Thang điểm mới", shortDesc:"", detail:"", tableContent:"", mode:"text", hasCalculator:false, scoreItems:[], interpretations:[], history:[], images:[], attachment:null};
     DATA.scales.push(s);
     schedulePersist();
     renderGrid();
-    openDetail(s.id, true);
+    openEdit(s.id, true);
   }
 
   function confirmDeleteScale(id){
@@ -788,9 +768,15 @@
   function showDetailOverlay(){
     document.getElementById("detailOverlay").classList.remove("hidden");
   }
-  function openDetail(id, focusTitle){
+  function openUse(id){
     currentScaleId = id;
-    currentView = "info";
+    currentView = "use";
+    renderDetailPanel();
+    showDetailOverlay();
+  }
+  function openEdit(id, focusTitle){
+    currentScaleId = id;
+    currentView = "edit";
     renderDetailPanel();
     showDetailOverlay();
     if(focusTitle){
@@ -800,22 +786,10 @@
       }, 30);
     }
   }
-  function openCalcUse(id){
-    currentScaleId = id;
-    currentView = "calcUse";
-    renderDetailPanel();
-    showDetailOverlay();
-  }
-  function openCalcBuilder(id){
-    currentScaleId = id;
-    currentView = "calcBuilder";
-    renderDetailPanel();
-    showDetailOverlay();
-  }
   function closeDetail(skipPending){
     document.getElementById("detailOverlay").classList.add("hidden");
     currentScaleId = null;
-    currentView = "info";
+    currentView = "use";
     if(!skipPending && pendingRemotePayload){
       var p = pendingRemotePayload; pendingRemotePayload = null;
       applyRemoteData(p);
@@ -838,12 +812,15 @@
     var s = getCurrentScale();
     var panel = document.getElementById("detailPanel");
     if(!s){ panel.innerHTML = ""; return; }
-    if(currentView === "calcUse"){ renderCalcUsePanel(s, panel); }
-    else if(currentView === "calcBuilder"){ renderCalcBuilderPanel(s, panel); }
-    else { renderInfoPanel(s, panel); }
+    if(currentView === "edit"){ renderEditPanel(s, panel); }
+    else { renderUsePanel(s, panel); }
   }
 
-  function renderInfoPanel(s, panel){
+  /* ---------- edit page: everything about the scale in one place ---------- */
+  function renderEditPanel(s, panel){
+    if(!s.scoreItems) s.scoreItems = [];
+    if(!s.interpretations) s.interpretations = [];
+
     var categoryOptions = DATA.categories.map(function(c){
       return '<option value="' + c.id + '"' + (c.id === s.categoryId ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
     }).join('');
@@ -863,11 +840,17 @@
       '<textarea class="field-textarea" id="detailInput" rows="4"></textarea>' +
 
       '<label class="field-label">Nội dung bảng điểm chi tiết (văn bản)</label>' +
-      '<textarea class="field-textarea" id="tableInput" rows="6" placeholder="Dán hoặc gõ nội dung bảng điểm tại đây (từng mục, từng dòng điểm số…)."></textarea>' +
-      '<div class="field-hint">Mẹo: mở file Word gốc, chọn toàn bộ bảng, dán trực tiếp vào đây.</div>' +
+      '<textarea class="field-textarea" id="tableInput" rows="5" placeholder="Dán hoặc gõ nội dung bảng điểm tại đây (từng mục, từng dòng điểm số…)."></textarea>' +
 
-      '<label class="field-label">Bảng chấm điểm tương tác</label>' +
-      '<div id="calcStatusArea"></div>' +
+      '<label class="field-label">Bảng chấm điểm tương tác (tuỳ chọn)</label>' +
+      '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục để app tự cộng điểm khi dùng thật — bỏ trống nếu chỉ cần văn bản ở trên. "Chọn 1 đáp án" (mỗi đáp án gắn điểm), "chọn nhiều đáp án – cộng dồn" (kiểu CAT/checklist), hoặc "nhập số" (VD thang đau 0–10).</div>' +
+      '<div class="score-items" id="scoreItemsWrap"></div>' +
+      '<span class="add-link" id="addScoreItem">+ Thêm mục đánh giá</span>' +
+      '<label class="field-label">Diễn giải theo tổng điểm (tuỳ chọn)</label>' +
+      '<div class="interp-rows" id="interpRows"></div>' +
+      '<span class="add-link" id="addInterp">+ Thêm mức diễn giải</span>' +
+      '<label class="field-label">Xem thử</label>' +
+      '<div class="calc-box" id="calcPreview"></div>' +
 
       '<label class="field-label">Hình ảnh minh họa</label>' +
       '<div class="gallery" id="gallery"></div>' +
@@ -898,73 +881,6 @@
     document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
     document.getElementById("deleteScaleBtn").addEventListener("click", function(){ confirmDeleteScale(s.id); });
 
-    renderCalcStatusArea(s);
-    renderGallery();
-    renderAttachment();
-
-    document.getElementById("attachBtn").addEventListener("click", function(){ document.getElementById("attachFileInput").click(); });
-    document.getElementById("attachFileInput").addEventListener("change", function(e){
-      var file = e.target.files[0];
-      if(file) handleAttachment(file);
-      e.target.value = "";
-    });
-  }
-
-  function renderCalcStatusArea(s){
-    var area = document.getElementById("calcStatusArea");
-    if(!area) return;
-    if(s.hasCalculator){
-      area.innerHTML =
-        '<div class="field-hint" style="margin-bottom:8px;">✓ Đã có — hiện thành một ô riêng (màu xanh lá) trong danh sách thang điểm.</div>' +
-        '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">' +
-          '<button class="icon-btn" id="openCalcUseBtn" type="button">Mở bảng chấm điểm</button>' +
-          '<button class="icon-btn" id="openCalcBuilderBtn" type="button">Chỉnh sửa cấu trúc</button>' +
-          '<span class="danger-link" id="removeCalcBtn">Xóa bảng chấm điểm</span>' +
-        '</div>';
-      document.getElementById("openCalcUseBtn").addEventListener("click", function(){ openCalcUse(s.id); });
-      document.getElementById("openCalcBuilderBtn").addEventListener("click", function(){ openCalcBuilder(s.id); });
-      document.getElementById("removeCalcBtn").addEventListener("click", function(){
-        showConfirmModal("Xóa bảng chấm điểm", "Xóa bảng chấm điểm tương tác của thang này? Các mục và cách tính đã tạo sẽ mất.", function(){
-          s.hasCalculator = false;
-          s.scoreItems = [];
-          s.interpretations = [];
-          schedulePersist();
-          renderCalcStatusArea(s);
-        });
-      });
-    } else {
-      area.innerHTML = '<button class="btn btn-gold" id="createCalcBtn" type="button" style="padding:8px 14px; font-size:13px;">+ Tạo bảng chấm điểm cho thang này</button>';
-      document.getElementById("createCalcBtn").addEventListener("click", function(){
-        s.hasCalculator = true;
-        if(!s.scoreItems) s.scoreItems = [];
-        if(!s.interpretations) s.interpretations = [];
-        schedulePersist();
-        openCalcBuilder(s.id);
-      });
-    }
-  }
-
-  /* ---------- interactive score builder (own view) ---------- */
-  function renderCalcBuilderPanel(s, panel){
-    panel.innerHTML =
-      '<button class="btn-close" id="closeDetailBtn">✕</button>' +
-      '<label class="field-label" style="font-size:19px; color:var(--gold); margin-top:2px;">' + escapeHtml(s.title || "") + ' — Chỉnh sửa bảng chấm điểm</label>' +
-      '<div class="field-hint" style="margin-bottom:8px;">Tạo từng mục đánh giá. Mỗi mục có thể là "chọn 1 đáp án" (mỗi đáp án gắn số điểm), "chọn nhiều đáp án – cộng dồn" (mỗi đáp án được tick sẽ cộng điểm riêng, dùng cho các mục kiểu CAT/checklist triệu chứng), hoặc "nhập số" (ví dụ thang đau 0–10).</div>' +
-      '<div class="score-items" id="scoreItemsWrap"></div>' +
-      '<span class="add-link" id="addScoreItem">+ Thêm mục đánh giá</span>' +
-      '<label class="field-label">Diễn giải theo tổng điểm (tuỳ chọn)</label>' +
-      '<div class="interp-rows" id="interpRows"></div>' +
-      '<span class="add-link" id="addInterp">+ Thêm mức diễn giải</span>' +
-      '<label class="field-label">Xem thử</label>' +
-      '<div class="calc-box" id="calcPreview"></div>' +
-      '<div class="detail-footer">' +
-        '<span class="save-status" id="saveStatus"></span>' +
-        '<button class="btn btn-gold" id="backToUseBtn" type="button" style="padding:8px 14px; font-size:13px;">Xong, dùng thử →</button>' +
-      '</div>';
-
-    document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
-    document.getElementById("backToUseBtn").addEventListener("click", function(){ openCalcUse(s.id); });
-
     renderScoreItems();
     renderInterpRows();
     renderCalcPreview();
@@ -980,21 +896,135 @@
       schedulePersist();
       renderInterpRows();
     });
+
+    renderGallery();
+    renderAttachment();
+
+    document.getElementById("attachBtn").addEventListener("click", function(){ document.getElementById("attachFileInput").click(); });
+    document.getElementById("attachFileInput").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(file) handleAttachment(file);
+      e.target.value = "";
+    });
   }
 
-  /* ---------- interactive score calculator (use-only view) ---------- */
-  function renderCalcUsePanel(s, panel){
+  /* ---------- use page: fill in the calculator, save a scoring record with patient name ---------- */
+  function renderUsePanel(s, panel){
+    if(!s.history) s.history = [];
     panel.innerHTML =
       '<button class="btn-close" id="closeDetailBtn">✕</button>' +
-      '<label class="field-label" style="font-size:19px; color:var(--gold); margin-top:2px;">' + escapeHtml(s.title || "") + ' — Bảng chấm điểm</label>' +
+      '<div class="node-menu-dot" id="openEditFromUseBtn" style="position:static; display:inline-flex; float:right; margin-top:2px;" title="Sửa thông tin, nội dung, ảnh…">⋯</div>' +
+      '<label class="field-label title-input" style="display:block; font-size:19px; color:var(--gold); margin-top:2px;">' + escapeHtml(s.title || "") + '</label>' +
+      (s.shortDesc ? '<div class="field-hint" style="margin-bottom:10px;">' + escapeHtml(s.shortDesc) + '</div>' : '') +
       '<div class="calc-box" id="calcPreviewUse"></div>' +
-      '<div class="detail-footer">' +
-        '<span class="add-link" id="editCalcFromUseBtn">Chỉnh sửa cấu trúc bảng này</span>' +
-        '<span></span>' +
-      '</div>';
+
+      '<label class="field-label">Lưu lần chấm điểm này</label>' +
+      '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+        '<input type="text" class="field-input" id="patientNameInput" placeholder="Tên bệnh nhân" style="flex:1; min-width:160px;">' +
+        '<button class="btn btn-gold" id="saveRecordBtn" type="button" style="padding:9px 16px;">💾 Lưu</button>' +
+      '</div>' +
+      '<div class="save-status" id="recordSaveStatus" style="margin-top:6px;"></div>' +
+
+      '<label class="field-label">Lịch sử đã chấm (' + s.history.length + ')</label>' +
+      '<div id="historyList"></div>' +
+      (s.history.length ? '<span class="add-link" id="exportHistoryBtn">⇩ Xuất lịch sử ra file CSV</span>' : '');
+
     document.getElementById("closeDetailBtn").addEventListener("click", function(){ closeDetail(); });
-    document.getElementById("editCalcFromUseBtn").addEventListener("click", function(){ openCalcBuilder(s.id); });
-    renderCalcPreviewInto(document.getElementById("calcPreviewUse"), s);
+    document.getElementById("openEditFromUseBtn").addEventListener("click", function(){ openEdit(s.id); });
+
+    var calcApi = renderCalcPreviewInto(document.getElementById("calcPreviewUse"), s);
+
+    document.getElementById("saveRecordBtn").addEventListener("click", function(){
+      var nameInput = document.getElementById("patientNameInput");
+      var name = nameInput.value.trim();
+      var statusEl = document.getElementById("recordSaveStatus");
+      if(!name){
+        statusEl.style.color = "var(--red)";
+        statusEl.textContent = "Nhập tên bệnh nhân trước khi lưu.";
+        return;
+      }
+      var snap = calcApi.getSnapshot();
+      if(!snap){
+        statusEl.style.color = "var(--red)";
+        statusEl.textContent = "Chưa có mục chấm điểm nào để lưu — bấm ⋯ để thêm.";
+        return;
+      }
+      s.history.unshift({
+        id: uid(),
+        patientName: name,
+        date: new Date().toISOString(),
+        total: snap.total,
+        complete: snap.complete,
+        interpretation: snap.interpretation,
+        items: snap.items
+      });
+      schedulePersist();
+      renderUsePanel(s, panel);
+    });
+
+    renderHistoryList(s);
+
+    var exportBtn = document.getElementById("exportHistoryBtn");
+    if(exportBtn){ exportBtn.addEventListener("click", function(){ exportScaleHistory(s); }); }
+  }
+
+  function renderHistoryList(s){
+    var wrap = document.getElementById("historyList");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    if(!s.history || !s.history.length){
+      wrap.innerHTML = '<div class="field-hint">Chưa có lần chấm nào được lưu.</div>';
+      return;
+    }
+    s.history.forEach(function(rec, idx){
+      var row = document.createElement("div");
+      row.className = "history-row";
+      var dateStr = new Date(rec.date).toLocaleString("vi-VN");
+      row.innerHTML =
+        '<div class="history-main"><b></b> — ' + escapeHtml(dateStr) + '</div>' +
+        '<div class="history-sub">Tổng điểm: <b>' + rec.total + '</b>' + (rec.complete ? '' : ' (chưa đủ mục)') + (rec.interpretation ? ' — ' + escapeHtml(rec.interpretation) : '') + '</div>';
+      row.querySelector(".history-main b").textContent = rec.patientName;
+      var rm = document.createElement("span");
+      rm.className = "remove-x";
+      rm.textContent = "✕";
+      rm.title = "Xóa lần chấm này";
+      rm.addEventListener("click", function(){
+        s.history.splice(idx,1);
+        schedulePersist();
+        renderHistoryList(s);
+      });
+      row.appendChild(rm);
+      wrap.appendChild(row);
+    });
+  }
+
+  function exportScaleHistory(s){
+    var rows = [["Ngày giờ","Tên bệnh nhân","Tổng điểm","Đầy đủ","Diễn giải","Chi tiết từng mục"]];
+    (s.history||[]).forEach(function(rec){
+      var itemsStr = (rec.items||[]).map(function(it){ return it.label + ": " + it.answer + " (" + it.points + "đ)"; }).join(" | ");
+      rows.push([
+        new Date(rec.date).toLocaleString("vi-VN"),
+        rec.patientName,
+        String(rec.total),
+        rec.complete ? "Có" : "Không",
+        rec.interpretation || "",
+        itemsStr
+      ]);
+    });
+    var csv = rows.map(function(r){
+      return r.map(function(cell){
+        return '"' + String(cell).replace(/"/g,'""') + '"';
+      }).join(",");
+    }).join("\r\n");
+    var blob = new Blob(["\uFEFF" + csv], {type:"text/csv;charset=utf-8;"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "lich-su-cham-diem-" + (s.title||"thang-diem").replace(/[^\w\u00C0-\u1EF9]+/g,"-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
   }
 
   function renderScoreItems(){
@@ -1128,14 +1158,18 @@
   }
 
   function renderCalcPreviewInto(box, s){
-    if(!box || !s) return;
+    if(!box || !s) return { getSnapshot: function(){ return null; } };
     box.innerHTML = "";
     if(!s.scoreItems || !s.scoreItems.length){
-      box.innerHTML = '<div class="field-hint">Chưa có mục đánh giá nào — thêm mục ở trên để xem bảng tính điểm.</div>';
-      return;
+      box.innerHTML = '<div class="field-hint">Chưa có mục đánh giá nào — bấm dấu ⋯ để thêm mục.</div>';
+      return { getSnapshot: function(){ return null; } };
     }
     var currentValues = {};
-    s.scoreItems.forEach(function(item){ currentValues[item.id] = item.type === "multi" ? 0 : null; });
+    var currentAnswerText = {};
+    s.scoreItems.forEach(function(item){
+      currentValues[item.id] = item.type === "multi" ? 0 : null;
+      currentAnswerText[item.id] = item.type === "multi" ? "" : null;
+    });
     var totalValueEl, interpEl;
 
     s.scoreItems.forEach(function(item){
@@ -1157,6 +1191,7 @@
           radio.name = "calc_" + item.id;
           radio.addEventListener("change", function(){
             currentValues[item.id] = opt.points;
+            currentAnswerText[item.id] = opt.label;
             updateTotal();
           });
           lab.appendChild(radio);
@@ -1170,17 +1205,19 @@
         var checkDiv = document.createElement("div");
         checkDiv.className = "calc-options";
         var selectedPoints = {};
+        var selectedLabels = {};
         (item.options||[]).forEach(function(opt, oi){
           var lab = document.createElement("label");
           lab.className = "calc-option";
           var checkbox = document.createElement("input");
           checkbox.type = "checkbox";
           checkbox.addEventListener("change", function(){
-            if(this.checked){ selectedPoints[oi] = opt.points; }
-            else { delete selectedPoints[oi]; }
+            if(this.checked){ selectedPoints[oi] = opt.points; selectedLabels[oi] = opt.label; }
+            else { delete selectedPoints[oi]; delete selectedLabels[oi]; }
             var sum = 0;
             Object.keys(selectedPoints).forEach(function(k){ sum += selectedPoints[k]; });
             currentValues[item.id] = sum;
+            currentAnswerText[item.id] = Object.keys(selectedLabels).map(function(k){ return selectedLabels[k]; }).join(", ");
             updateTotal();
           });
           lab.appendChild(checkbox);
@@ -1199,6 +1236,7 @@
         numInput.addEventListener("input", function(){
           var v = this.value === "" ? null : Number(this.value);
           currentValues[item.id] = v;
+          currentAnswerText[item.id] = this.value === "" ? null : this.value;
           updateTotal();
         });
         itemDiv.appendChild(numInput);
@@ -1229,6 +1267,19 @@
       var match = (s.interpretations||[]).find(function(r){ return total >= r.min && total <= r.max; });
       interpEl.textContent = match && match.label ? match.label : "";
     }
+
+    function getSnapshot(){
+      var total = 0;
+      s.scoreItems.forEach(function(item){ total += currentValues[item.id] || 0; });
+      var complete = s.scoreItems.every(function(item){ return currentValues[item.id] !== null; });
+      var match = (s.interpretations||[]).find(function(r){ return total >= r.min && total <= r.max; });
+      var items = s.scoreItems.map(function(item){
+        return { label: item.label, answer: currentAnswerText[item.id] || "(chưa chọn)", points: currentValues[item.id] || 0 };
+      });
+      return { total: total, complete: complete, interpretation: match && match.label ? match.label : "", items: items };
+    }
+
+    return { getSnapshot: getSnapshot };
   }
 
   /* ---------------- gallery / attachments ---------------- */
