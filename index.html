@@ -425,6 +425,7 @@
     localStorage.removeItem(SYNC_CONFIG_KEY);
   }
 
+
   function loadScript(src){
     return new Promise(function(resolve, reject){
       var s = document.createElement("script");
@@ -441,6 +442,20 @@
   function loadMammothSDK(){
     if(window.mammoth) return Promise.resolve();
     return loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.12.2/mammoth.browser.min.js");
+  }
+  function loadPdfJsSDK(){
+    if(window.pdfjsLib) return Promise.resolve();
+    return loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js").then(function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    });
+  }
+  function readFileAsArrayBuffer(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(e){ resolve(e.target.result); };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
   }
 
   function parseFirebaseConfigText(text){
@@ -861,9 +876,321 @@
     return [{ id: uid(), label: groupLabel || "Nhóm mục", type: "multi", options: options, min: 0, max: 10 }];
   }
 
+  /* ---------- automatic docx scanning: real grid tables ---------- */
+  function tableToGrid(tableEl){
+    var rows = Array.prototype.slice.call(tableEl.rows);
+    var grid = [];
+    var rowSpanTracker = {};
+
+    rows.forEach(function(tr){
+      var gridRow = [];
+      var col = 0;
+      var cells = Array.prototype.slice.call(tr.cells);
+      var cellIdx = 0;
+
+      while(cellIdx < cells.length || (rowSpanTracker[col] && rowSpanTracker[col].remaining > 0)){
+        if(rowSpanTracker[col] && rowSpanTracker[col].remaining > 0){
+          gridRow[col] = rowSpanTracker[col].text;
+          rowSpanTracker[col].remaining--;
+          if(rowSpanTracker[col].remaining <= 0) delete rowSpanTracker[col];
+          col++;
+          continue;
+        }
+        if(cellIdx < cells.length){
+          var cell = cells[cellIdx];
+          var text = (cell.textContent || "").replace(/\s+/g, " ").trim();
+          var colspan = cell.colSpan || 1;
+          var rowspan = cell.rowSpan || 1;
+          for(var k = 0; k < colspan; k++){
+            gridRow[col + k] = text;
+            if(rowspan > 1){ rowSpanTracker[col + k] = { text: text, remaining: rowspan - 1 }; }
+          }
+          col += colspan;
+          cellIdx++;
+        } else {
+          break;
+        }
+      }
+      grid.push(gridRow);
+    });
+
+    var maxCols = grid.reduce(function(m, r){ return Math.max(m, r.length); }, 0);
+    grid.forEach(function(row){
+      for(var i = 0; i < maxCols; i++){ if(row[i] === undefined) row[i] = ""; }
+    });
+    return grid;
+  }
+
+  function isNumericCell(text){
+    if(text === undefined || text === null) return false;
+    var t = String(text).trim();
+    if(!t) return false;
+    var cleaned = t.replace(/[^\-0-9.,]/g, "").replace(",", ".");
+    return cleaned !== "" && !isNaN(Number(cleaned));
+  }
+  function extractNumber(text){
+    var cleaned = String(text || "").trim().replace(/[^\-0-9.,]/g, "").replace(",", ".");
+    var n = Number(cleaned);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function detectShapeAndBuildItems(grid){
+    grid = grid.filter(function(row){ return row.some(function(c){ return c && c.trim(); }); });
+    if(grid.length < 2) return null;
+    var numCols = grid.reduce(function(m, r){ return Math.max(m, r.length); }, 0);
+    if(numCols < 2) return null;
+
+    var header = grid[0];
+    var dataRows = grid.slice(1);
+
+    var headerRest = header.slice(1).filter(function(c){ return c && c.trim(); });
+    var headerAllNumeric = headerRest.length >= 1 && headerRest.every(isNumericCell);
+
+    if(headerAllNumeric && numCols >= 3){
+      var pointValues = header.slice(1).map(function(c){ return isNumericCell(c) ? extractNumber(c) : null; });
+      var itemsA = [];
+      dataRows.forEach(function(row){
+        var label = (row[0] || "").trim();
+        if(!label) return;
+        var options = [];
+        for(var j = 1; j < numCols; j++){
+          var cellText = (row[j] || "").trim();
+          var pts = pointValues[j - 1];
+          if(!cellText || pts === null) continue;
+          options.push({ label: cellText, points: pts });
+        }
+        if(options.length){ itemsA.push({ id: uid(), label: label, type: "choice", options: options, min: 0, max: 10 }); }
+      });
+      if(itemsA.length){ return { items: itemsA, shapeName: "bảng có cột điểm ở tiêu đề" }; }
+    }
+
+    if(numCols >= 3){
+      var lastColVals = dataRows.map(function(r){ return r[numCols - 1]; });
+      var numericCount = lastColVals.filter(isNumericCell).length;
+      if(lastColVals.length && numericCount >= Math.ceil(lastColVals.length * 0.7)){
+        var groups = [];
+        var currentGroup = null;
+        dataRows.forEach(function(row){
+          var label = (row[0] || "").trim();
+          if(label){ currentGroup = { label: label, options: [] }; groups.push(currentGroup); }
+          if(!currentGroup) return;
+          var optText = row.slice(1, numCols - 1).join(" ").trim();
+          var pts = extractNumber(row[numCols - 1]);
+          if(optText){ currentGroup.options.push({ label: optText, points: pts }); }
+        });
+        var itemsB = groups.filter(function(g){ return g.options.length; }).map(function(g){
+          return { id: uid(), label: g.label, type: "choice", options: g.options, min: 0, max: 10 };
+        });
+        if(itemsB.length){ return { items: itemsB, shapeName: "bảng dạng mục – đáp án – điểm" }; }
+      }
+    }
+
+    if(numCols === 2){
+      var secondColVals = dataRows.map(function(r){ return r[1]; });
+      var numericCount2 = secondColVals.filter(isNumericCell).length;
+      if(secondColVals.length && numericCount2 >= Math.ceil(secondColVals.length * 0.7)){
+        var optionsC = dataRows.map(function(r){ return { label: (r[0] || "").trim(), points: extractNumber(r[1]) }; })
+          .filter(function(o){ return o.label; });
+        if(optionsC.length){
+          return { items: [{ id: uid(), label: "Nhóm mục (từ bảng)", type: "multi", options: optionsC, min: 0, max: 10 }], shapeName: "bảng 2 cột: đáp án – điểm (cộng dồn)" };
+        }
+      }
+    }
+    return null;
+  }
+
+  /* ---------- automatic docx scanning: heading + checkbox-list sections (VD: Oswestry) ---------- */
+  function parseChecklistSections(text){
+    var bulletRegex = /^[☐□▢◻◽⬜○◯●•]|^\(\s?\)|^\[\s?\]|^[-*]\s/;
+    var lines = (text || "").split("\n").map(function(l){ return l.trim(); }).filter(function(l){ return l; });
+    var items = [];
+    var current = null;
+    lines.forEach(function(line){
+      if(bulletRegex.test(line)){
+        if(!current){
+          current = { id: uid(), label: "Mục", type: "choice", options: [], min: 0, max: 10 };
+          items.push(current);
+        }
+        var cleanText = line.replace(bulletRegex, "").trim();
+        if(cleanText){ current.options.push({ label: cleanText, points: current.options.length }); }
+      } else {
+        current = { id: uid(), label: line, type: "choice", options: [], min: 0, max: 10 };
+        items.push(current);
+      }
+    });
+    return items.filter(function(it){ return it.options.length > 0; });
+  }
+
+  /* ---------- automatic PDF scanning: no real table structure, so reconstruct from text positions ---------- */
+  function groupItemsIntoLines(items, yTolerance){
+    yTolerance = yTolerance || 3;
+    var sorted = items.slice().sort(function(a, b){ return b.y - a.y; });
+    var lines = [];
+    var current = null;
+    sorted.forEach(function(it){
+      if(!current || Math.abs(current.y - it.y) > yTolerance){
+        current = { y: it.y, items: [] };
+        lines.push(current);
+      }
+      current.items.push(it);
+    });
+    lines.forEach(function(l){ l.items.sort(function(a, b){ return a.x - b.x; }); });
+    return lines;
+  }
+
+  function pdfLineToColumns(items, gapThreshold){
+    var cols = [];
+    var current = null;
+    var prevRight = null;
+    items.forEach(function(it){
+      if(current === null || (prevRight !== null && (it.x - prevRight) > gapThreshold)){
+        current = [];
+        cols.push(current);
+      }
+      current.push(it.text);
+      prevRight = it.x + (it.width || (it.text.length * 5));
+    });
+    return cols.map(function(c){ return c.join(" ").replace(/\s+/g, " ").trim(); });
+  }
+
+  function detectPdfTableBlocks(allLines, gapThreshold){
+    var blocks = [];
+    var current = null;
+    allLines.forEach(function(line){
+      var cols = pdfLineToColumns(line.items, gapThreshold);
+      if(cols.length >= 2){
+        if(current && current.colCount === cols.length){
+          current.rows.push(cols);
+        } else {
+          current = { colCount: cols.length, rows: [cols] };
+          blocks.push(current);
+        }
+      } else {
+        current = null;
+      }
+    });
+    return blocks.filter(function(b){ return b.rows.length >= 2; }).map(function(b){ return b.rows; });
+  }
+
+  function scanPdfForItems(file){
+    return loadPdfJsSDK().then(function(){
+      return readFileAsArrayBuffer(file).then(function(buf){
+        return window.pdfjsLib.getDocument({ data: buf }).promise.then(function(pdf){
+          var pagePromises = [];
+          for(var i = 1; i <= pdf.numPages; i++){
+            pagePromises.push(pdf.getPage(i).then(function(page){
+              return page.getTextContent().then(function(tc){
+                return tc.items.map(function(it){
+                  return { text: it.str, x: it.transform[4], y: it.transform[5], width: it.width || (it.str.length * 5) };
+                });
+              });
+            }));
+          }
+          return Promise.all(pagePromises);
+        });
+      });
+    }).then(function(pagesItems){
+      var allLines = [];
+      pagesItems.forEach(function(items){
+        allLines = allLines.concat(groupItemsIntoLines(items, 3));
+      });
+
+      var groups = [];
+      var fullText = allLines.map(function(l){
+        return l.items.map(function(it){ return it.text; }).join(" ").replace(/\s+/g, " ").trim();
+      }).join("\n");
+
+      var checklistItems = parseChecklistSections(fullText);
+      if(checklistItems.length){
+        groups.push({ source: "Danh sách dạng mục – tick chọn (từ PDF)", items: checklistItems });
+      }
+
+      var tableBlocks = detectPdfTableBlocks(allLines, 12);
+      tableBlocks.forEach(function(grid, idx){
+        var detection = detectShapeAndBuildItems(grid);
+        if(detection && detection.items.length){
+          groups.push({ source: "Vùng giống bảng " + (idx + 1) + " trong PDF (" + detection.shapeName + ")", items: detection.items });
+        }
+      });
+
+      return { groups: groups, noTextFound: allLines.length === 0 };
+    });
+  }
+
+  function scanDocxForItems(file){
+    return loadMammothSDK().then(function(){
+      return new Promise(function(resolve, reject){
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          var buf = ev.target.result;
+          Promise.all([
+            window.mammoth.convertToHtml({ arrayBuffer: buf }).catch(function(){ return { value: "" }; }),
+            window.mammoth.extractRawText({ arrayBuffer: buf }).catch(function(){ return { value: "" }; })
+          ]).then(function(results){
+            var groups = [];
+
+            var tmp = document.createElement("div");
+            tmp.innerHTML = results[0].value;
+            var tableEls = tmp.querySelectorAll("table");
+            Array.prototype.forEach.call(tableEls, function(tEl, idx){
+              var grid = tableToGrid(tEl);
+              var detection = detectShapeAndBuildItems(grid);
+              if(detection && detection.items.length){
+                groups.push({ source: "Bảng " + (idx + 1) + " trong file (" + detection.shapeName + ")", items: detection.items });
+              }
+            });
+
+            var checklistItems = parseChecklistSections(results[1].value);
+            if(checklistItems.length){
+              groups.push({ source: "Danh sách dạng mục – tick chọn (không có bảng kẻ)", items: checklistItems });
+            }
+
+            resolve(groups);
+          }).catch(reject);
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    });
+  }
+
+  function renderDocxScanResult(s, container, groups){
+    if(!groups.length){
+      container.innerHTML = '<div class="field-hint" style="color:var(--red);">Không nhận diện được bảng kẻ hay danh sách mục nào trong file này — thử cách dán thủ công bên dưới.</div>';
+      return;
+    }
+    var totalItems = groups.reduce(function(sum, g){ return sum + g.items.length; }, 0);
+    var html = '<div class="field-hint" style="margin-bottom:8px;">Nhận diện được ' + totalItems + ' mục:</div>';
+    groups.forEach(function(g){
+      html += '<div style="border:1px solid var(--wood-border); border-radius:6px; padding:8px; margin-bottom:8px; background:rgba(0,0,0,.15);">';
+      html += '<div style="font-size:12px; color:var(--gold-soft); margin-bottom:4px;">' + escapeHtml(g.source) + '</div>';
+      g.items.forEach(function(item){
+        var optsStr = item.options.map(function(o){ return escapeHtml(o.label) + ' (' + o.points + 'đ)'; }).join(', ');
+        html += '<div style="font-size:12.5px; color:var(--text-light); margin-bottom:3px;">• <b>' + escapeHtml(item.label) + '</b>: ' + optsStr + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '<button class="btn btn-gold" id="confirmDocxImportBtn" type="button" style="padding:8px 14px; font-size:13px;">Thêm ' + totalItems + ' mục vào bảng chấm điểm</button>';
+    container.innerHTML = html;
+
+    document.getElementById("confirmDocxImportBtn").addEventListener("click", function(){
+      groups.forEach(function(g){ s.scoreItems = s.scoreItems.concat(g.items); });
+      schedulePersist();
+      renderScoreItems();
+      container.innerHTML = '<div class="field-hint" style="color:var(--green);">Đã thêm xong — kiểm tra danh sách mục bên dưới, sửa lại tên/điểm nếu cần.</div>';
+    });
+  }
+
   function renderQuickPastePanel(s, panel){
     panel.innerHTML =
-      '<div class="field-hint" style="margin-bottom:8px;">Dùng khi thang điểm đã có sẵn dạng bảng — dán nhanh vào đây thay vì bấm từng nút "+ Thêm mục". Không qua AI, chạy hoàn toàn trong máy.</div>' +
+      '<div class="field-hint" style="margin-bottom:8px;">Cách 1 — Quét file, không qua AI: Word (.docx) đọc được bảng kẻ thật (kể cả ô gộp) và danh sách tick chọn kiểu Oswestry; PDF không có bảng thật nên chỉ đọc được danh sách tick chọn và các bảng có cột thẳng hàng rõ ràng — kém chính xác hơn Word.</div>' +
+      '<button class="icon-btn" id="scanDocxBtn" type="button">📎 Chọn file Word hoặc PDF để quét</button>' +
+      '<input type="file" id="scanDocxFileInput" accept=".docx,.pdf" style="display:none">' +
+      '<div id="docxScanResult" style="margin-top:8px;"></div>' +
+
+      '<div style="border-top:1px dashed var(--wood-border); margin:16px 0;"></div>' +
+
+      '<div class="field-hint" style="margin-bottom:8px;">Cách 2 — Dán thủ công (copy đoạn văn bản rồi dán vào đây — dùng khi cách quét ở trên không nhận diện được):</div>' +
       '<div style="display:flex; gap:16px; margin-bottom:8px; font-size:13px; flex-wrap:wrap;">' +
         '<label><input type="radio" name="pasteMode" value="choice" checked> Mỗi dòng là 1 mục, chọn 1 đáp án</label>' +
         '<label><input type="radio" name="pasteMode" value="multi"> Mỗi dòng là 1 triệu chứng, cộng dồn</label>' +
@@ -873,12 +1200,36 @@
         '<input type="text" class="field-input" id="multiGroupNameInput" placeholder="Tên nhóm mục (VD: Triệu chứng)">' +
       '</div>' +
       '<textarea class="field-textarea" id="quickPasteText" rows="6" placeholder="Dán nội dung ở đây…"></textarea>' +
-      '<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">' +
-        '<button class="icon-btn" id="importDocxBtn" type="button">📎 Lấy nội dung từ file Word (.docx)</button>' +
-        '<input type="file" id="docxFileInput" accept=".docx" style="display:none">' +
+      '<div style="margin-top:8px;">' +
         '<button class="btn btn-gold" id="parsePasteBtn" type="button" style="padding:8px 14px; font-size:13px;">Phân tích &amp; thêm vào bảng</button>' +
       '</div>' +
       '<div class="save-status" id="pasteStatus" style="margin-top:6px;"></div>';
+
+    document.getElementById("scanDocxBtn").addEventListener("click", function(){
+      document.getElementById("scanDocxFileInput").click();
+    });
+    document.getElementById("scanDocxFileInput").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(!file) return;
+      var resultArea = document.getElementById("docxScanResult");
+      resultArea.innerHTML = '<div class="field-hint">Đang đọc và phân tích file…</div>';
+      var isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+      var scanPromise = isPdf ? scanPdfForItems(file).then(function(result){
+        if(result.noTextFound){
+          resultArea.innerHTML = '<div class="field-hint" style="color:var(--red);">File này có vẻ là bản scan/ảnh (không có chữ để đọc trực tiếp) — cách này không đọc được, cần dán tay bên dưới.</div>';
+          return null;
+        }
+        return result.groups;
+      }) : scanDocxForItems(file);
+
+      scanPromise.then(function(groups){
+        if(groups === null) return;
+        renderDocxScanResult(s, resultArea, groups);
+      }).catch(function(err){
+        resultArea.innerHTML = '<div class="field-hint" style="color:var(--red);">Không đọc được file: ' + escapeHtml((err && err.message) || String(err)) + '</div>';
+      });
+      e.target.value = "";
+    });
 
     function updateHint(){
       var mode = panel.querySelector('input[name="pasteMode"]:checked').value;
@@ -895,35 +1246,6 @@
     updateHint();
     Array.prototype.forEach.call(panel.querySelectorAll('input[name="pasteMode"]'), function(r){
       r.addEventListener("change", updateHint);
-    });
-
-    document.getElementById("importDocxBtn").addEventListener("click", function(){
-      document.getElementById("docxFileInput").click();
-    });
-    document.getElementById("docxFileInput").addEventListener("change", function(e){
-      var file = e.target.files[0];
-      if(!file) return;
-      var statusEl = document.getElementById("pasteStatus");
-      statusEl.style.color = "var(--text-muted)";
-      statusEl.textContent = "Đang đọc file…";
-      loadMammothSDK().then(function(){
-        var reader = new FileReader();
-        reader.onload = function(ev){
-          window.mammoth.extractRawText({ arrayBuffer: ev.target.result }).then(function(result){
-            document.getElementById("quickPasteText").value = result.value;
-            statusEl.style.color = "var(--green)";
-            statusEl.textContent = "Đã lấy nội dung — kiểm tra/sửa cho đúng cú pháp bên trên rồi bấm Phân tích.";
-          }).catch(function(err){
-            statusEl.style.color = "var(--red)";
-            statusEl.textContent = "Không đọc được nội dung file: " + err.message;
-          });
-        };
-        reader.readAsArrayBuffer(file);
-      }).catch(function(){
-        statusEl.style.color = "var(--red)";
-        statusEl.textContent = "Không tải được thư viện đọc file (kiểm tra mạng).";
-      });
-      e.target.value = "";
     });
 
     document.getElementById("parsePasteBtn").addEventListener("click", function(){
