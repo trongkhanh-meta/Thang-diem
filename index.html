@@ -105,6 +105,10 @@
     background-image:linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
     background-size:26px 26px;
   }
+  .app-footer{
+    text-align:center; font-size:11.5px; color:var(--text-muted); font-style:italic;
+    padding:10px 12px; border-top:1px solid var(--wood-border); background:var(--wood);
+  }
   .empty-hint{ color:var(--text-muted); font-style:italic; text-align:center; margin-top:60px; font-size:15px; }
   .node-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(148px, 1fr)); gap:16px; }
   .node{
@@ -292,6 +296,7 @@
 
   <nav class="tab-bar" id="tabBar"></nav>
   <main class="grid-area" id="gridArea"></main>
+  <footer class="app-footer">© <span id="footerYear"></span> Khanh — Kho Thang Điểm &amp; Test Đánh Giá PHCN</footer>
 </div>
 
 <div class="tooltip hidden" id="tooltip"></div>
@@ -943,25 +948,28 @@
     var header = grid[0];
     var dataRows = grid.slice(1);
 
-    var headerRest = header.slice(1).filter(function(c){ return c && c.trim(); });
-    var headerAllNumeric = headerRest.length >= 1 && headerRest.every(isNumericCell);
-
-    if(headerAllNumeric && numCols >= 3){
-      var pointValues = header.slice(1).map(function(c){ return isNumericCell(c) ? extractNumber(c) : null; });
-      var itemsA = [];
+    // Shape 1 (ma trận): hàng = triệu chứng, cột = mức điểm. Tiêu đề cột là tên đáp án (VD "Không", "Nhẹ", "Nặng"),
+    // ô giao giữa hàng triệu chứng và cột đáp án là con số điểm.
+    var bodyCells = [];
+    dataRows.forEach(function(row){
+      for(var j = 1; j < numCols; j++){ if(row[j] !== undefined && row[j] !== "") bodyCells.push(row[j]); }
+    });
+    var bodyNumericCount = bodyCells.filter(isNumericCell).length;
+    if(bodyCells.length && bodyNumericCount >= Math.ceil(bodyCells.length * 0.7)){
+      var itemsMatrix = [];
       dataRows.forEach(function(row){
         var label = (row[0] || "").trim();
         if(!label) return;
         var options = [];
         for(var j = 1; j < numCols; j++){
-          var cellText = (row[j] || "").trim();
-          var pts = pointValues[j - 1];
-          if(!cellText || pts === null) continue;
-          options.push({ label: cellText, points: pts });
+          var headerLabel = (header[j] || "").trim();
+          var cellVal = row[j];
+          if(!headerLabel || !isNumericCell(cellVal)) continue;
+          options.push({ label: headerLabel, points: extractNumber(cellVal) });
         }
-        if(options.length){ itemsA.push({ id: uid(), label: label, type: "choice", options: options, min: 0, max: 10 }); }
+        if(options.length){ itemsMatrix.push({ id: uid(), label: label, type: "choice", options: options, min: 0, max: 10 }); }
       });
-      if(itemsA.length){ return { items: itemsA, shapeName: "bảng có cột điểm ở tiêu đề" }; }
+      if(itemsMatrix.length){ return { items: itemsMatrix, shapeName: "bảng ma trận: hàng triệu chứng × cột mức điểm" }; }
     }
 
     if(numCols >= 3){
@@ -999,9 +1007,10 @@
     return null;
   }
 
-  /* ---------- automatic docx scanning: heading + checkbox-list sections (VD: Oswestry) ---------- */
+  /* ---------- automatic docx/pdf scanning: heading + bullet-list sections (VD: Oswestry) ---------- */
   function parseChecklistSections(text){
-    var bulletRegex = /^[☐□▢◻◽⬜○◯●•]|^\(\s?\)|^\[\s?\]|^[-*]\s/;
+    var bulletRegex = /^[☐□▢◻◽⬜○◯●•]|^\(\s?\)|^\[\s?\]|^[-*–—]\s/;
+    var trailingNumberRegex = /^(.*\S)\s*[:\-–—]?\s*\(?(-?\d+(?:[.,]\d+)?)\)?\s*$/;
     var lines = (text || "").split("\n").map(function(l){ return l.trim(); }).filter(function(l){ return l; });
     var items = [];
     var current = null;
@@ -1012,7 +1021,18 @@
           items.push(current);
         }
         var cleanText = line.replace(bulletRegex, "").trim();
-        if(cleanText){ current.options.push({ label: cleanText, points: current.options.length }); }
+        if(!cleanText) return;
+        var m = cleanText.match(trailingNumberRegex);
+        var optLabel, points;
+        if(m){
+          optLabel = m[1].trim();
+          points = Number(m[2].replace(",", "."));
+          if(isNaN(points)) points = current.options.length;
+        } else {
+          optLabel = cleanText;
+          points = current.options.length;
+        }
+        if(optLabel){ current.options.push({ label: optLabel, points: points }); }
       } else {
         current = { id: uid(), label: line, type: "choice", options: [], min: 0, max: 10 };
         items.push(current);
@@ -2138,6 +2158,8 @@
     bindGlobalEvents();
     renderTabs();
     renderGrid();
+    var footerYearEl = document.getElementById("footerYear");
+    if(footerYearEl){ footerYearEl.textContent = new Date().getFullYear(); }
 
     var cfg = loadSyncConfig();
     if(cfg){
