@@ -296,7 +296,7 @@
 
   <nav class="tab-bar" id="tabBar"></nav>
   <main class="grid-area" id="gridArea"></main>
-  <footer class="app-footer">© <span id="footerYear"></span> Khanh — Kho Thang Điểm &amp; Test Đánh Giá PHCN</footer>
+  <footer class="app-footer">© <span id="footerYear"></span> Hoàng Trọng Khánh — Kho Thang Điểm &amp; Test Đánh Giá PHCN</footer>
 </div>
 
 <div class="tooltip hidden" id="tooltip"></div>
@@ -453,6 +453,10 @@
     return loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js").then(function(){
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     });
+  }
+  function loadXlsxSDK(){
+    if(window.XLSX) return Promise.resolve();
+    return loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
   }
   function readFileAsArrayBuffer(file){
     return new Promise(function(resolve, reject){
@@ -947,6 +951,7 @@
 
     var header = grid[0];
     var dataRows = grid.slice(1);
+    var THRESHOLD = 0.5;
 
     // Shape 1 (ma trận): hàng = triệu chứng, cột = mức điểm. Tiêu đề cột là tên đáp án (VD "Không", "Nhẹ", "Nặng"),
     // ô giao giữa hàng triệu chứng và cột đáp án là con số điểm.
@@ -955,11 +960,12 @@
       for(var j = 1; j < numCols; j++){ if(row[j] !== undefined && row[j] !== "") bodyCells.push(row[j]); }
     });
     var bodyNumericCount = bodyCells.filter(isNumericCell).length;
-    if(bodyCells.length && bodyNumericCount >= Math.ceil(bodyCells.length * 0.7)){
+    if(bodyCells.length && bodyNumericCount >= Math.ceil(bodyCells.length * THRESHOLD)){
       var itemsMatrix = [];
-      dataRows.forEach(function(row){
+      var skippedMatrix = [];
+      dataRows.forEach(function(row, idx){
         var label = (row[0] || "").trim();
-        if(!label) return;
+        if(!label){ skippedMatrix.push("dòng " + (idx + 2) + " (cột đầu trống)"); return; }
         var options = [];
         for(var j = 1; j < numCols; j++){
           var headerLabel = (header[j] || "").trim();
@@ -968,39 +974,47 @@
           options.push({ label: headerLabel, points: extractNumber(cellVal) });
         }
         if(options.length){ itemsMatrix.push({ id: uid(), label: label, type: "choice", options: options, min: 0, max: 10 }); }
+        else { skippedMatrix.push("dòng " + (idx + 2) + " (\"" + label + "\" — không có ô điểm hợp lệ)"); }
       });
-      if(itemsMatrix.length){ return { items: itemsMatrix, shapeName: "bảng ma trận: hàng triệu chứng × cột mức điểm" }; }
+      if(itemsMatrix.length){ return { items: itemsMatrix, shapeName: "bảng ma trận: hàng triệu chứng × cột mức điểm", skipped: skippedMatrix }; }
     }
 
     if(numCols >= 3){
       var lastColVals = dataRows.map(function(r){ return r[numCols - 1]; });
       var numericCount = lastColVals.filter(isNumericCell).length;
-      if(lastColVals.length && numericCount >= Math.ceil(lastColVals.length * 0.7)){
+      if(lastColVals.length && numericCount >= Math.ceil(lastColVals.length * THRESHOLD)){
         var groups = [];
         var currentGroup = null;
-        dataRows.forEach(function(row){
+        var skippedB = [];
+        dataRows.forEach(function(row, idx){
           var label = (row[0] || "").trim();
           if(label){ currentGroup = { label: label, options: [] }; groups.push(currentGroup); }
-          if(!currentGroup) return;
+          if(!currentGroup){ skippedB.push("dòng " + (idx + 2) + " (chưa rõ thuộc mục nào)"); return; }
           var optText = row.slice(1, numCols - 1).join(" ").trim();
-          var pts = extractNumber(row[numCols - 1]);
-          if(optText){ currentGroup.options.push({ label: optText, points: pts }); }
+          var ptsRaw = row[numCols - 1];
+          if(!optText || !isNumericCell(ptsRaw)){ skippedB.push("dòng " + (idx + 2) + " (thiếu đáp án hoặc điểm)"); return; }
+          currentGroup.options.push({ label: optText, points: extractNumber(ptsRaw) });
         });
         var itemsB = groups.filter(function(g){ return g.options.length; }).map(function(g){
           return { id: uid(), label: g.label, type: "choice", options: g.options, min: 0, max: 10 };
         });
-        if(itemsB.length){ return { items: itemsB, shapeName: "bảng dạng mục – đáp án – điểm" }; }
+        if(itemsB.length){ return { items: itemsB, shapeName: "bảng dạng mục – đáp án – điểm", skipped: skippedB }; }
       }
     }
 
     if(numCols === 2){
       var secondColVals = dataRows.map(function(r){ return r[1]; });
       var numericCount2 = secondColVals.filter(isNumericCell).length;
-      if(secondColVals.length && numericCount2 >= Math.ceil(secondColVals.length * 0.7)){
-        var optionsC = dataRows.map(function(r){ return { label: (r[0] || "").trim(), points: extractNumber(r[1]) }; })
-          .filter(function(o){ return o.label; });
+      if(secondColVals.length && numericCount2 >= Math.ceil(secondColVals.length * THRESHOLD)){
+        var skippedC = [];
+        var optionsC = [];
+        dataRows.forEach(function(r, idx){
+          var lbl = (r[0] || "").trim();
+          if(!lbl || !isNumericCell(r[1])){ skippedC.push("dòng " + (idx + 2)); return; }
+          optionsC.push({ label: lbl, points: extractNumber(r[1]) });
+        });
         if(optionsC.length){
-          return { items: [{ id: uid(), label: "Nhóm mục (từ bảng)", type: "multi", options: optionsC, min: 0, max: 10 }], shapeName: "bảng 2 cột: đáp án – điểm (cộng dồn)" };
+          return { items: [{ id: uid(), label: "Nhóm mục (từ bảng)", type: "multi", options: optionsC, min: 0, max: 10 }], shapeName: "bảng 2 cột: đáp án – điểm (cộng dồn)", skipped: skippedC };
         }
       }
     }
@@ -1092,6 +1106,20 @@
     return blocks.filter(function(b){ return b.rows.length >= 2; }).map(function(b){ return b.rows; });
   }
 
+  function classifyGrids(gridsWithLabels){
+    var groups = [];
+    var unrecognized = [];
+    gridsWithLabels.forEach(function(g){
+      var detection = detectShapeAndBuildItems(g.grid);
+      if(detection && detection.items.length){
+        groups.push({ source: g.label + " (" + detection.shapeName + ")", items: detection.items, skipped: detection.skipped });
+      } else {
+        unrecognized.push({ label: g.label, grid: g.grid });
+      }
+    });
+    return { groups: groups, unrecognized: unrecognized };
+  }
+
   function scanPdfForItems(file){
     return loadPdfJsSDK().then(function(){
       return readFileAsArrayBuffer(file).then(function(buf){
@@ -1115,25 +1143,22 @@
         allLines = allLines.concat(groupItemsIntoLines(items, 3));
       });
 
-      var groups = [];
       var fullText = allLines.map(function(l){
         return l.items.map(function(it){ return it.text; }).join(" ").replace(/\s+/g, " ").trim();
       }).join("\n");
 
       var checklistItems = parseChecklistSections(fullText);
+      var tableBlocks = detectPdfTableBlocks(allLines, 12);
+      var gridsWithLabels = tableBlocks.map(function(grid, idx){
+        return { label: "Vùng giống bảng " + (idx + 1) + " trong PDF", grid: grid };
+      });
+      var classified = classifyGrids(gridsWithLabels);
+
       if(checklistItems.length){
-        groups.push({ source: "Danh sách dạng mục – tick chọn (từ PDF)", items: checklistItems });
+        classified.groups.unshift({ source: "Danh sách dạng mục – tick chọn (từ PDF)", items: checklistItems });
       }
 
-      var tableBlocks = detectPdfTableBlocks(allLines, 12);
-      tableBlocks.forEach(function(grid, idx){
-        var detection = detectShapeAndBuildItems(grid);
-        if(detection && detection.items.length){
-          groups.push({ source: "Vùng giống bảng " + (idx + 1) + " trong PDF (" + detection.shapeName + ")", items: detection.items });
-        }
-      });
-
-      return { groups: groups, noTextFound: allLines.length === 0 };
+      return { groups: classified.groups, unrecognized: classified.unrecognized, noTextFound: allLines.length === 0 };
     });
   }
 
@@ -1147,25 +1172,20 @@
             window.mammoth.convertToHtml({ arrayBuffer: buf }).catch(function(){ return { value: "" }; }),
             window.mammoth.extractRawText({ arrayBuffer: buf }).catch(function(){ return { value: "" }; })
           ]).then(function(results){
-            var groups = [];
-
             var tmp = document.createElement("div");
             tmp.innerHTML = results[0].value;
             var tableEls = tmp.querySelectorAll("table");
-            Array.prototype.forEach.call(tableEls, function(tEl, idx){
-              var grid = tableToGrid(tEl);
-              var detection = detectShapeAndBuildItems(grid);
-              if(detection && detection.items.length){
-                groups.push({ source: "Bảng " + (idx + 1) + " trong file (" + detection.shapeName + ")", items: detection.items });
-              }
+            var gridsWithLabels = Array.prototype.map.call(tableEls, function(tEl, idx){
+              return { label: "Bảng " + (idx + 1) + " trong file", grid: tableToGrid(tEl) };
             });
+            var classified = classifyGrids(gridsWithLabels);
 
             var checklistItems = parseChecklistSections(results[1].value);
             if(checklistItems.length){
-              groups.push({ source: "Danh sách dạng mục – tick chọn (không có bảng kẻ)", items: checklistItems });
+              classified.groups.push({ source: "Danh sách dạng mục – tick chọn (không có bảng kẻ)", items: checklistItems });
             }
 
-            resolve(groups);
+            resolve({ groups: classified.groups, unrecognized: classified.unrecognized });
           }).catch(reject);
         };
         reader.onerror = reject;
@@ -1174,13 +1194,32 @@
     });
   }
 
-  function renderDocxScanResult(s, container, groups){
-    if(!groups.length){
+  function scanXlsxForItems(file){
+    return loadXlsxSDK().then(function(){
+      return readFileAsArrayBuffer(file).then(function(buf){
+        var wb = window.XLSX.read(buf, { type: "array" });
+        var gridsWithLabels = wb.SheetNames.map(function(sheetName){
+          var sheet = wb.Sheets[sheetName];
+          var rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+          var grid = rows.map(function(row){
+            return row.map(function(cell){ return cell === null || cell === undefined ? "" : String(cell).trim(); });
+          });
+          return { label: "Sheet \"" + sheetName + "\"", grid: grid };
+        });
+        return classifyGrids(gridsWithLabels);
+      });
+    });
+  }
+
+  function renderDocxScanResult(s, container, result){
+    var groups = result.groups || [];
+    var unrecognized = result.unrecognized || [];
+    if(!groups.length && !unrecognized.length){
       container.innerHTML = '<div class="field-hint" style="color:var(--red);">Không nhận diện được bảng kẻ hay danh sách mục nào trong file này — thử cách dán thủ công bên dưới.</div>';
       return;
     }
     var totalItems = groups.reduce(function(sum, g){ return sum + g.items.length; }, 0);
-    var html = '<div class="field-hint" style="margin-bottom:8px;">Nhận diện được ' + totalItems + ' mục:</div>';
+    var html = '<div class="field-hint" style="margin-bottom:8px;">Nhận diện được ' + totalItems + ' mục' + (unrecognized.length ? ', còn ' + unrecognized.length + ' bảng chưa tự nhận diện được cấu trúc (xem thô bên dưới)' : '') + ':</div>';
     groups.forEach(function(g){
       html += '<div style="border:1px solid var(--wood-border); border-radius:6px; padding:8px; margin-bottom:8px; background:rgba(0,0,0,.15);">';
       html += '<div style="font-size:12px; color:var(--gold-soft); margin-bottom:4px;">' + escapeHtml(g.source) + '</div>';
@@ -1188,24 +1227,41 @@
         var optsStr = item.options.map(function(o){ return escapeHtml(o.label) + ' (' + o.points + 'đ)'; }).join(', ');
         html += '<div style="font-size:12.5px; color:var(--text-light); margin-bottom:3px;">• <b>' + escapeHtml(item.label) + '</b>: ' + optsStr + '</div>';
       });
+      if(g.skipped && g.skipped.length){
+        html += '<div style="font-size:11px; color:var(--red); margin-top:4px;">⚠ Bỏ qua ' + g.skipped.length + ': ' + escapeHtml(g.skipped.slice(0, 4).join("; ")) + (g.skipped.length > 4 ? "…" : "") + '</div>';
+      }
       html += '</div>';
     });
-    html += '<button class="btn btn-gold" id="confirmDocxImportBtn" type="button" style="padding:8px 14px; font-size:13px;">Thêm ' + totalItems + ' mục vào bảng chấm điểm</button>';
+
+    unrecognized.forEach(function(u){
+      html += '<div style="border:1px dashed var(--red); border-radius:6px; padding:8px; margin-bottom:8px; background:rgba(0,0,0,.1);">';
+      html += '<div style="font-size:12px; color:var(--red); margin-bottom:4px;">' + escapeHtml(u.label) + ' — không tự nhận diện được cấu trúc, xem thô để tự thêm tay:</div>';
+      var previewRows = u.grid.slice(0, 6);
+      html += '<div class="code-block" style="max-height:130px; overflow:auto;">' + escapeHtml(previewRows.map(function(r){ return r.join(" | "); }).join("\n")) + (u.grid.length > 6 ? "\n…" : "") + '</div>';
+      html += '</div>';
+    });
+
+    if(groups.length){
+      html += '<button class="btn btn-gold" id="confirmDocxImportBtn" type="button" style="padding:8px 14px; font-size:13px;">Thêm ' + totalItems + ' mục vào bảng chấm điểm</button>';
+    }
     container.innerHTML = html;
 
-    document.getElementById("confirmDocxImportBtn").addEventListener("click", function(){
-      groups.forEach(function(g){ s.scoreItems = s.scoreItems.concat(g.items); });
-      schedulePersist();
-      renderScoreItems();
-      container.innerHTML = '<div class="field-hint" style="color:var(--green);">Đã thêm xong — kiểm tra danh sách mục bên dưới, sửa lại tên/điểm nếu cần.</div>';
-    });
+    var confirmBtn = document.getElementById("confirmDocxImportBtn");
+    if(confirmBtn){
+      confirmBtn.addEventListener("click", function(){
+        groups.forEach(function(g){ s.scoreItems = s.scoreItems.concat(g.items); });
+        schedulePersist();
+        renderScoreItems();
+        container.innerHTML = '<div class="field-hint" style="color:var(--green);">Đã thêm xong — kiểm tra danh sách mục bên dưới, sửa lại tên/điểm nếu cần.</div>';
+      });
+    }
   }
 
   function renderQuickPastePanel(s, panel){
     panel.innerHTML =
-      '<div class="field-hint" style="margin-bottom:8px;">Cách 1 — Quét file, không qua AI: Word (.docx) đọc được bảng kẻ thật (kể cả ô gộp) và danh sách tick chọn kiểu Oswestry; PDF không có bảng thật nên chỉ đọc được danh sách tick chọn và các bảng có cột thẳng hàng rõ ràng — kém chính xác hơn Word.</div>' +
-      '<button class="icon-btn" id="scanDocxBtn" type="button">📎 Chọn file Word hoặc PDF để quét</button>' +
-      '<input type="file" id="scanDocxFileInput" accept=".docx,.pdf" style="display:none">' +
+      '<div class="field-hint" style="margin-bottom:8px;">Cách 1 — Quét file, không qua AI: <b>Excel (.xlsx)</b> chính xác nhất vì có lưới ô rõ ràng, không cần đoán; Word (.docx) đọc được bảng kẻ thật (kể cả ô gộp) và danh sách tick chọn; PDF không có bảng thật nên chỉ đọc theo cột thẳng hàng — kém chính xác hơn.</div>' +
+      '<button class="icon-btn" id="scanDocxBtn" type="button">📎 Chọn file Excel, Word hoặc PDF để quét</button>' +
+      '<input type="file" id="scanDocxFileInput" accept=".xlsx,.docx,.pdf" style="display:none">' +
       '<div id="docxScanResult" style="margin-top:8px;"></div>' +
 
       '<div style="border-top:1px dashed var(--wood-border); margin:16px 0;"></div>' +
@@ -1234,17 +1290,25 @@
       var resultArea = document.getElementById("docxScanResult");
       resultArea.innerHTML = '<div class="field-hint">Đang đọc và phân tích file…</div>';
       var isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
-      var scanPromise = isPdf ? scanPdfForItems(file).then(function(result){
-        if(result.noTextFound){
-          resultArea.innerHTML = '<div class="field-hint" style="color:var(--red);">File này có vẻ là bản scan/ảnh (không có chữ để đọc trực tiếp) — cách này không đọc được, cần dán tay bên dưới.</div>';
-          return null;
-        }
-        return result.groups;
-      }) : scanDocxForItems(file);
+      var isXlsx = /\.xlsx$/i.test(file.name);
+      var scanPromise;
+      if(isXlsx){
+        scanPromise = scanXlsxForItems(file);
+      } else if(isPdf){
+        scanPromise = scanPdfForItems(file).then(function(result){
+          if(result.noTextFound){
+            resultArea.innerHTML = '<div class="field-hint" style="color:var(--red);">File này có vẻ là bản scan/ảnh (không có chữ để đọc trực tiếp) — cách này không đọc được, cần dán tay bên dưới.</div>';
+            return null;
+          }
+          return result;
+        });
+      } else {
+        scanPromise = scanDocxForItems(file);
+      }
 
-      scanPromise.then(function(groups){
-        if(groups === null) return;
-        renderDocxScanResult(s, resultArea, groups);
+      scanPromise.then(function(result){
+        if(result === null) return;
+        renderDocxScanResult(s, resultArea, result);
       }).catch(function(err){
         resultArea.innerHTML = '<div class="field-hint" style="color:var(--red);">Không đọc được file: ' + escapeHtml((err && err.message) || String(err)) + '</div>';
       });
